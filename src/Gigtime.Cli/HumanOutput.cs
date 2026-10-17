@@ -20,6 +20,11 @@ internal sealed class HumanOutput
 			Ansi = color ? AnsiSupport.Yes : AnsiSupport.No,
 			ColorSystem = color ? ColorSystemSupport.Standard : ColorSystemSupport.NoColors,
 			Interactive = InteractionSupport.No,
+			// #3: CI enrichers must not override gig’s terminal and NO_COLOR decision.
+			Enrichment = new ProfileEnrichment
+			{
+				UseDefaultEnrichers = color
+			},
 		});
 
 		console.Profile.Width = 180;

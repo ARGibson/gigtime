@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using Gigtime.Contracts;
@@ -25,6 +26,49 @@ public sealed class RenderingTests
 		(await app.RunAsync(["client", "list"], TestContext.Current.CancellationToken)).ShouldBe(0);
 		output.ToString().Contains('\u001b', StringComparison.Ordinal).ShouldBe(expectedAnsi);
 		output.ToString().ShouldContain("Example [blue]");
+	}
+
+	[Fact]
+	public async Task Piped_output_stays_plain_under_CI_environment_enrichers()
+	{
+		await using var server = await FakeServer.StartAsync(CommandCases.Response("client list"));
+
+		var start = new ProcessStartInfo("dotnet")
+		{
+			RedirectStandardOutput = true,
+			RedirectStandardError = true,
+			UseShellExecute = false,
+		};
+
+		start.ArgumentList.Add(typeof(CliApplication).Assembly.Location);
+		start.ArgumentList.Add("client");
+		start.ArgumentList.Add("list");
+		start.Environment["CI"] = "true";
+		start.Environment["GITHUB_ACTIONS"] = "true";
+		start.Environment["TF_BUILD"] = "True";
+		start.Environment["TERM"] = "dumb";
+		start.Environment.Remove("NO_COLOR");
+		start.Environment["XDG_DATA_HOME"] = server.Paths.DataDirectory;
+		start.Environment["XDG_RUNTIME_DIR"] = server.Paths.RuntimeDirectory;
+		start.Environment["XDG_CONFIG_HOME"] = server.Paths.ConfigDirectory;
+		using var process = Process.Start(start)!;
+		var output = process.StandardOutput.ReadToEndAsync(TestContext.Current.CancellationToken);
+		var error = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
+
+		try
+		{
+			await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+			process.ExitCode.ShouldBe(0, await error);
+			var rendered = await output;
+			rendered.ShouldContain("Example [blue]");
+			rendered.ShouldNotContain("\u001b");
+			server.Requests.Count.ShouldBe(1);
+		}
+		finally
+		{
+			if (!process.HasExited) process.Kill(true);
+			await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+		}
 	}
 
 	[Fact]
