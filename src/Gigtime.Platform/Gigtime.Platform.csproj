@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<IsAotCompatible>true</IsAotCompatible>
+		<!-- #2: LibraryImport generates the AOT-safe statx/geteuid ownership check. -->
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+</Project>

@@ -5,7 +5,7 @@ public sealed class CatalogueView
 {
 	public const string StreamId = "catalogue";
 	public string Id { get; init; } = StreamId;
-	public Defaults Defaults { get; set; } = new(TimeZoneInfo.Local.Id);
+	public Defaults Defaults { get; set; } = new("UTC");
 	public Dictionary<Guid, Client> Clients { get; init; } = [];
 	public Dictionary<Guid, Project> Projects { get; init; } = [];
 
