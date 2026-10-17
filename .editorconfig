@@ -89,7 +89,9 @@ dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
 dotnet_style_null_propagation = true:suggestion
 dotnet_style_coalesce_expression = true:suggestion
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+dotnet_diagnostic.IDE0041.severity = warning
 csharp_style_prefer_null_check_over_type_check = true:warning
+dotnet_diagnostic.IDE0150.severity = warning
 
 # Naming: private fields camelCase with no underscore; constants PascalCase.
 # Rules apply by specificity, so the const rule wins over the private-field rule.
