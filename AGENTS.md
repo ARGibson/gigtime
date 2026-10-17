@@ -112,6 +112,7 @@ gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property bel
 
 ## Working in the code
 
+- **CI must be green before a pull request is reviewed.**
 - **Read the surrounding code and the nearest tests before changing anything.**
 - **Make the smallest change that meets the issue.** Raise a refactor in its own issue.
 - **Stop and ask when acceptance is ambiguous or cannot be met as written.**
