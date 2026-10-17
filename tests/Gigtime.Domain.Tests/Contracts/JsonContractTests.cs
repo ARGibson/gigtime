@@ -103,7 +103,7 @@ public sealed class JsonContractTests
 		var types = (Type[])
 		[
 			typeof(SetDefaultsRequest), typeof(AddClientRequest), typeof(ChangeClientRequest), typeof(AddProjectRequest),
-			typeof(ChangeProjectRequest), typeof(StartTaskRequest), typeof(RecordTaskRequest), typeof(AmendTaskRequest), typeof(VoidTaskRequest),
+			typeof(ChangeProjectRequest), typeof(StartTaskRequest), typeof(RecordTaskInput), typeof(AmendTaskInput), typeof(VoidTaskRequest),
 			typeof(Envelope<TaskDto>), typeof(Envelope<TasksDto>), typeof(Envelope<StatusDto>), typeof(Envelope<DefaultsDto>),
 			typeof(Envelope<ClientDto>), typeof(Envelope<ClientsDto>), typeof(Envelope<ProjectDto>), typeof(Envelope<ProjectsDto>),
 			typeof(Envelope<ReportDto>), typeof(Envelope<AcknowledgementDto>), typeof(Envelope<HealthDto>),
@@ -113,70 +113,13 @@ public sealed class JsonContractTests
 	}
 
 	[Fact]
-	public void Clearing_flags_and_offset_input_round_trip_through_the_generated_context()
+	public void Clearing_flags_round_trip_through_the_generated_context()
 	{
 		var request = new ChangeClientRequest(ClearTimezone: true, ClearRounding: true);
 		var json = JsonSerializer.Serialize(request, GigtimeJsonContext.Default.ChangeClientRequest);
 
 		json.ShouldContain("\"clear_timezone\":true");
 		JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.ChangeClientRequest).ShouldBe(request);
-
-		var backfillJson = """
-											{"client":"acme","project":"site-audit","start":"2026-03-02T10:00:00+01:00","end":"2026-03-02T10:01:00+01:00"}
-											""";
-
-		var backfill = JsonSerializer.Deserialize(backfillJson, GigtimeJsonContext.Default.RecordTaskRequest)!;
-
-		backfill.Start.Offset.ShouldBe(TimeSpan.Zero);
-		backfill.Start.Hour.ShouldBe(9);
-	}
-
-	[Theory]
-	[InlineData("2026-03-02T09:00:00Z")]
-	[InlineData("2026-03-02T10:00:00+01:00")]
-	[InlineData("2026-03-02T04:00:00-05:00")]
-	public void Wire_instants_with_explicit_offsets_are_normalized_to_utc(string instant)
-	{
-		var json = "{\"client\":\"acme\",\"project\":\"site-audit\",\"start\":\"" + instant + "\",\"end\":\"" + instant + "\"}";
-		var request = JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.RecordTaskRequest)!;
-
-		request.Start.Offset.ShouldBe(TimeSpan.Zero);
-		request.Start.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture));
-	}
-
-	[Theory]
-	[InlineData("2026-03-02T09:00:00")]
-	[InlineData("2026-03-02T09:00:00.123")]
-	[InlineData("2026-03-02")]
-	public void Wire_instants_without_an_offset_are_rejected(string instant)
-	{
-		var json = "{\"client\":\"acme\",\"project\":\"site-audit\",\"start\":\"" + instant + "\",\"end\":\"2026-03-02T10:00:00Z\"}";
-
-		Should.Throw<JsonException>(() => JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.RecordTaskRequest));
-	}
-
-	[Theory]
-	[InlineData("start")]
-	[InlineData("end")]
-	public void Nullable_amendment_instants_reject_offset_free_input(string field)
-	{
-		var json = "{\"interval\":1,\"" + field + "\":\"2026-03-02T09:00:00\"}";
-
-		Should.Throw<JsonException>(() => JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.AmendTaskRequest));
-	}
-
-	[Theory]
-	[InlineData("2026-03-02T09:00:00Z", "2026-03-02T09:01:00Z")]
-	[InlineData("2026-03-02T10:00:00+01:00", "2026-03-02T04:01:00-05:00")]
-	public void Nullable_amendment_instants_accept_explicit_offsets(string start, string end)
-	{
-		var json = "{\"interval\":1,\"start\":\"" + start + "\",\"end\":\"" + end + "\"}";
-		var request = JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.AmendTaskRequest)!;
-
-		request.Start.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture));
-		request.End.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:01:00Z", CultureInfo.InvariantCulture));
-		request.Start!.Value.Offset.ShouldBe(TimeSpan.Zero);
-		request.End!.Value.Offset.ShouldBe(TimeSpan.Zero);
 	}
 
 	[Fact]

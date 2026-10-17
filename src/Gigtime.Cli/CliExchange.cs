@@ -68,6 +68,8 @@ internal sealed class CliExchange(
 				"Choose a private XDG_RUNTIME_DIR, or correct the reported fallback directory's ownership and mode (0700).");
 		}
 
+		var exportStarted = false;
+
 		try
 		{
 			using var transport = new SocketsHttpHandler
@@ -96,27 +98,37 @@ internal sealed class CliExchange(
 				Timeout = TimeSpan.FromSeconds(10)
 			};
 
-			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+			var completion = stream ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead;
+			using var response = await client.SendAsync(request, completion, cancellationToken);
 
 			if (stream && response.IsSuccessStatusCode)
 			{
 				await using var bytes = await response.Content.ReadAsStreamAsync(cancellationToken);
 				using var reader = new StreamReader(bytes);
 
-				while (await reader.ReadLineAsync(cancellationToken) is { } line)
+				while (true)
 				{
+					using var lineTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+					lineTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+					var line = await reader.ReadLineAsync(lineTimeout.Token);
+
+					if (line is null) break;
+
 					var item = JsonSerializer.Deserialize(line, GigtimeJsonContext.Default.ExportEventDto);
 
 					if (item is null || string.IsNullOrWhiteSpace(item.Type))
-						return Fail(command, ErrorCodes.Internal, "The service returned invalid export data.", asJson);
+						return Fail(command, ErrorCodes.Internal, "The service returned invalid export data.", asJson && !exportStarted);
 
 					output.WriteLine(line);
+					exportStarted = true;
 				}
 
 				return ExitCodes.Success;
 			}
 
-			var body = await response.Content.ReadAsStringAsync(cancellationToken);
+			using var bodyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+			bodyTimeout.CancelAfter(TimeSpan.FromSeconds(10));
+			var body = await response.Content.ReadAsStringAsync(bodyTimeout.Token);
 			var envelope = JsonSerializer.Deserialize(body, responseType);
 
 			if (envelope is null || string.IsNullOrWhiteSpace(envelope.Command)
@@ -147,12 +159,12 @@ internal sealed class CliExchange(
 			return Fail(command,
 				ErrorCodes.Unavailable,
 				"Cannot reach gigtimed at " + socketPath + ": " + exception.Message,
-				asJson,
-				"Run gig setup.");
+				asJson && !exportStarted,
+				exportStarted ? null : "Run gig setup.");
 		}
 		catch (JsonException)
 		{
-			return Fail(command, ErrorCodes.Internal, "The service returned invalid JSON.", asJson);
+			return Fail(command, ErrorCodes.Internal, "The service returned invalid JSON.", asJson && !exportStarted);
 		}
 	}
 

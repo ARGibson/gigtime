@@ -16,19 +16,20 @@ public sealed class ExportTests
 		await app.CreateProjectAsync();
 		var id = "";
 
-		for (var i = 0; i < 105; i++)
+		for (var i = 0; i < 196; i++)
 			id = (await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("example", "project", "08:00", "08:01"))).Data!.Id;
 
 		await app.PostAsync<TaskDto>($"/v1/tasks/{id}/void", new VoidTaskRequest("mistake"));
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(104 * 60);
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(195 * 60);
 		(await app.GetAsync<TasksDto>("/v1/tasks?all=true&last=200")).Data!.Tasks.Single(t => t.Id == id).State.ShouldBe("voided");
 		(await app.GetAsync<TasksDto>("/v1/tasks?last=200")).Data!.Tasks.ShouldNotContain(t => t.Id == id);
 		var response = await app.Host.Scenario(s => s.Get.Url("/v1/export"));
 		var text = await response.ReadAsTextAsync();
 		var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-		lines.Length.ShouldBeGreaterThan(100);
+		// Two bootstrap events, client + project, 196 backfills and a void cross both 100-event page edges.
+		lines.Length.ShouldBe(201);
 		var exported = lines.Select(line => JsonSerializer.Deserialize(line, GigtimeJsonContext.Default.ExportEventDto)!).ToArray();
-		exported.Select(e => e.Sequence).ShouldBe(exported.Select(e => e.Sequence).Order());
+		exported.Select(e => e.Sequence).ShouldBe(Enumerable.Range(1, 201).Select(n => (long)n));
 		exported.Select(e => e.Sequence).Distinct().Count().ShouldBe(exported.Length);
 		exported.Any(e => e.Stream == id && e.Data.TryGetProperty("reason", out var reason) && reason.GetString() == "mistake").ShouldBeTrue();
 

@@ -51,6 +51,31 @@ public sealed class ReportTests
 			.ShouldBe(2 * decimal.Parse(expected, CultureInfo.InvariantCulture));
 	}
 
+	[Theory]
+	[InlineData("JPY", "1000", "116.66666666666666666666666667", "117")]
+	[InlineData("BHD", "1.2345", "0.144025", "0.144")]
+	[InlineData("GBP", "12.3", "1.435", "1.44")]
+	public async Task Fractional_earnings_preserve_unrounded_and_round_to_currency_minor_units(
+		string currency,
+		string rate,
+		string unrounded,
+		string rounded)
+	{
+		await using var app = await ServiceHost.StartAsync();
+		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("one", "One", currency, "UTC"));
+		await app.PostAsync<ProjectDto>("/v1/clients/one/projects", new AddProjectRequest("work", Rate: rate));
+		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("one", "work", "08:00", "08:07"));
+		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!;
+		var project = report.Totals.ShouldHaveSingleItem();
+		project.RawSeconds.ShouldBe(420);
+		project.RoundedSeconds.ShouldBe(420);
+		project.EstimatedEarnings!.Unrounded.ShouldBe(unrounded);
+		project.EstimatedEarnings.Rounded.ShouldBe(rounded);
+		var client = report.Clients.ShouldHaveSingleItem();
+		client.EstimatedEarnings!.Unrounded.ShouldBe(unrounded);
+		client.EstimatedEarnings.Rounded.ShouldBe(rounded);
+	}
+
 	[Fact]
 	public async Task Client_rounding_uses_unrounded_project_totals_and_currencies_never_mix()
 	{
