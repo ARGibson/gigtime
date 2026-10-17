@@ -3,13 +3,13 @@
 		<AssemblyName>gigtimed</AssemblyName>
 	</PropertyGroup>
 	<ItemGroup>
-		<ProjectReference Include="../Gigtime.Domain/Gigtime.Domain.csproj" />
-		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj" />
-		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj" />
+		<ProjectReference Include="../Gigtime.Domain/Gigtime.Domain.csproj"/>
+		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj"/>
+		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj"/>
 	</ItemGroup>
 	<ItemGroup>
-	  <PackageReference Include="Fisher" />
-	  <PackageReference Include="WolverineFx.Fisher" />
-	  <PackageReference Include="WolverineFx.Http" />
+		<PackageReference Include="Fisher"/>
+		<PackageReference Include="WolverineFx.Fisher"/>
+		<PackageReference Include="WolverineFx.Http"/>
 	</ItemGroup>
 </Project>
