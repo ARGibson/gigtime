@@ -30,7 +30,6 @@ public sealed class SocketActivationTests
 		};
 
 		start.ArgumentList.Add("--listen=" + socketPath);
-		start.ArgumentList.Add("--now");
 
 		foreach (var (variable, child) in new[] { ("XDG_DATA_HOME", "data"), ("XDG_RUNTIME_DIR", "runtime"), ("XDG_CONFIG_HOME", "config") })
 		{
