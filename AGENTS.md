@@ -35,18 +35,38 @@ Examples:
 - **Never use a package version published less than 24 hours ago.** After every package change, run `dotnet run scripts/check-package-age.cs` from the repo root; it fails on a version younger than 24 hours or missing from nuget.org.
 - **Add or upgrade with `dotnet add <project> package <id> --version <version>`,** then run the age check, and commit the change on its own with a `deps:` subject, including the updated `packages.lock.json` files.
 - **Restore with `dotnet restore --locked-mode`.** Commit every `packages.lock.json`; CI refuses a restore that would change one.
-- **Do not change `nuget.config`, `Directory.Build.props`, the age script or the threshold in a feature branch.** Change them in their own pull request.
+- **Do not change `nuget.config`, `Directory.Build.props`, `.editorconfig`, the scripts in `scripts/` or the age threshold in a feature branch.** Change them in their own pull request.
 
 ## Code
 
 ### Layout and style
 
 - **Group by feature.** Keep an aggregate or decider, its events, its endpoints and its projections in one feature folder. Mirror that folder in the test project.
-- **Name each file after its main type.** Keep an aggregate's events together in `<Aggregate>Events.cs`. Split a file by responsibility as it nears 300 lines; never split only to meet a line count.
+- **Name each file after its main type.** Keep an aggregate's events together in `<Aggregate>Events.cs`. Small types that exist only to serve the main type (its enum, a value record, an interface and its one implementation) may share its file; give a type its own file once another feature uses it or it grows past about ten lines. Split a file by responsibility as it nears 300 lines; never split only to meet a line count.
 - **Use file-scoped namespaces, `var`, records for events and DTOs, and collection expressions (`[]`).** Do not use `#region`.
-- **Name private fields in bare camelCase, without a leading underscore:** `private readonly ILogger<CatalogueStore> log;`.
-- **Comment why, not what.** Put intent on a type's `<summary>`. When a line exists because of a bug or a decision, cite the issue: `// #12: report periods use the client's timezone.`
+- **Name private fields in bare camelCase, without a leading underscore:** `private readonly ILogger<CatalogueStore> log;`. Name constants in PascalCase. Do not add an `Async` suffix unless a synchronous overload exists.
+- **Comment why, not what.** Put a type's intent in a `<summary>` only when its name does not make it obvious. When a line exists because of a bug or a decision, cite the issue: `// #12: report periods use the client's timezone.`
 - **Give every non-obvious package pin or build property a comment with its reason.**
+
+### Formatting
+
+`.editorconfig` is the source of truth; the build fails on most of it. These rules cover what it cannot express.
+
+- **Indent with tabs.** `dotnet run scripts/check-indentation.cs` fails on a line that starts with a space; `dotnet format` does not catch it.
+- **Put braces on their own line (Allman), and one statement on each line.** Never join statements with `;` on one line: `Id = e.TaskId; State = TaskState.Running;` is wrong.
+- **Brace every body that spans more than one line.** A single-statement body goes on the next line, indented and unbraced; the build moves it there:
+
+  ```csharp
+  if (!exists)
+  	return NotFound(id);
+  ```
+- **Expression-bodied members only when they fit on one line.** Properties, accessors and one-line helpers use `=>`; constructors never do; a method with more than one statement uses a block.
+- **Write out every access modifier; never qualify with `this.`.**
+- **Use primary constructors for injected dependencies.**
+- **Break long lines before they reach 140 columns.** Chains go one call per line with the dot leading; ternaries break before `?` and `:`; long parameter lists go one per line. Multi-line initialisers and collections end with a trailing comma.
+- **Order members:** fields and properties, constructors, public methods, then private helpers below their first caller.
+- **Prefer `switch` expressions for mapping a value; use a `switch` statement for side effects.**
+- **With JetBrains Rider, or its MCP server, reformat and lint each changed file before committing** (`reformat_file`, then `lint_files`); Rider reads the same `.editorconfig`.
 
 ### Handlers and endpoints
 
@@ -82,6 +102,6 @@ Examples:
 - **Read the surrounding code and the nearest tests before changing anything.**
 - **Make the smallest change that meets the issue.** Raise a refactor in its own issue.
 - **Stop and ask when acceptance is ambiguous or cannot be met as written.**
-- **Before committing, run:** `dotnet build`, `dotnet format --verify-no-changes`, `dotnet test`, and `dotnet run scripts/check-package-age.cs` when packages changed.
+- **Before committing, run:** `dotnet build`, `dotnet format --verify-no-changes`, `dotnet run scripts/check-indentation.cs`, `dotnet test`, and `dotnet run scripts/check-package-age.cs` when packages changed.
 - **Report what a check does not prove.** A fake-server CLI test does not prove the Unix socket; a JIT build does not prove the AOT publish.
 - **Check the squash subject before asking for a merge:** `gh pr view <n> --json title,commits`. On a single-commit PR, GitHub uses the commit subject.
