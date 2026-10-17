@@ -14,7 +14,7 @@ Apply these to every change in this repository, whether an agent or a person mak
 ## Commits
 
 - **Write every commit message in [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) form:** `<type>(<scope>): <subject>`.
-- **Types:** `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, `style`, `revert`.
+- **Types:** `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, `style`, `revert`, and `deps` for a commit that only adds, upgrades or removes packages.
 - **Scope (optional):** the area changed — `domain`, `contracts`, `platform`, `server`, `cli`, `tests`, `repo`.
 - **Subject:** imperative, lowercase start, no full stop, at most 72 characters including the prefix.
 - **Body:** say why, when the subject does not make it obvious.
@@ -27,6 +27,15 @@ Examples:
 - `fix(cli): map conflict to exit code 7` — correct.
 - `Added the task decider.` — wrong: no type, past tense, full stop.
 - `feat: Add Task Decider` — wrong: capitalised subject.
+
+## Packages
+
+- **Restore from nuget.org only.** `nuget.config` clears every other source; never add a feed.
+- **Pin exact versions in `Directory.Packages.props`.** Project files carry `PackageReference` items without versions.
+- **Never use a package version published less than 24 hours ago.** After every package change, run `dotnet run scripts/check-package-age.cs` from the repo root; it fails on a version younger than 24 hours or missing from nuget.org.
+- **Add or upgrade with `dotnet add <project> package <id> --version <version>`,** then run the age check, and commit the change on its own with a `deps:` subject, including the updated `packages.lock.json` files.
+- **Restore with `dotnet restore --locked-mode`.** Commit every `packages.lock.json`; CI refuses a restore that would change one.
+- **Do not change `nuget.config`, `Directory.Build.props`, the age script or the threshold in a feature branch.** Change them in their own pull request.
 
 ## Code
 
