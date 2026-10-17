@@ -39,24 +39,48 @@ public sealed partial class ReadmeTests
 	}
 
 	[Fact]
-	public void Readme_names_every_public_response_json_member_from_source_generated_metadata()
+	public void Readme_json_table_matches_public_response_members_in_both_directions()
 	{
-		Type[] types =
+		(string Name, Type Type)[] shapes =
 		[
-			typeof(Envelope<TaskDto>), typeof(ErrorDto), typeof(ErrorStateDto), typeof(DefaultsDto), typeof(ClientDto),
-			typeof(ProjectDto), typeof(ClientsDto), typeof(ProjectsDto), typeof(EntityDto), typeof(MoneyDto), typeof(TaskDto),
-			typeof(IntervalDto), typeof(PolicySnapshotDto), typeof(TasksDto), typeof(StatusDto), typeof(ReportDto), typeof(ReportTotalDto),
-			typeof(ClientReportTotalDto), typeof(EarningsDto), typeof(AcknowledgementDto), typeof(HealthDto), typeof(SetupDto),
-			typeof(ExportEventDto)
+			("Envelope", typeof(Envelope<TaskDto>)), ("Error", typeof(ErrorDto)), ("Error state", typeof(ErrorStateDto)),
+			("Defaults", typeof(DefaultsDto)), ("Client", typeof(ClientDto)), ("Project", typeof(ProjectDto)),
+			("Client list", typeof(ClientsDto)), ("Project list", typeof(ProjectsDto)), ("Entity", typeof(EntityDto)),
+			("Money", typeof(MoneyDto)), ("Task", typeof(TaskDto)), ("Interval", typeof(IntervalDto)),
+			("Policy snapshot", typeof(PolicySnapshotDto)), ("Log", typeof(TasksDto)), ("Status", typeof(StatusDto)),
+			("Report", typeof(ReportDto)), ("Project report total", typeof(ReportTotalDto)),
+			("Client/currency report total", typeof(ClientReportTotalDto)), ("Earnings", typeof(EarningsDto)),
+			("Acknowledgement", typeof(AcknowledgementDto)), ("Health", typeof(HealthDto)), ("Setup/check", typeof(SetupDto)),
+			("Export event", typeof(ExportEventDto))
 		];
 
-		var readme = Readme();
+		var table = Readme().Split("| Data shape | JSON keys |")[1].Split("\n\n")[0];
 
-		foreach (var type in types)
+		var rows = table
+			.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+			.Where(line => !line.StartsWith("|---", StringComparison.Ordinal))
+			.Select(line => line.Split('|'))
+			.ToDictionary(parts => parts[1].Split('(')[0].Trim(), parts => parts[2]);
+
+		rows.Keys.Order(StringComparer.Ordinal).ShouldBe(shapes.Select(shape => shape.Name).Order(StringComparer.Ordinal));
+
+		foreach (var (name, type) in shapes)
 		{
-			foreach (var property in GigtimeJsonContext.Default.GetTypeInfo(type)!.Properties)
-				readme.ShouldContain("`" + property.Name + "`");
+			var actual = JsonKeys().Matches(rows[name]).Select(match => match.Groups[1].Value).Order(StringComparer.Ordinal);
+
+			var expected = GigtimeJsonContext.Default.GetTypeInfo(type)!
+				.Properties.Select(property => property.Name)
+				.Order(StringComparer.Ordinal);
+
+			actual.ShouldBe(expected, name);
 		}
+	}
+
+	[Fact]
+	public void Readme_server_install_uses_the_fixture_framework_dependent_publish_without_a_runtime_identifier()
+	{
+		var command = Readme().Split('\n').Single(line => line.StartsWith("dotnet publish src/Gigtime.Server ", StringComparison.Ordinal));
+		command.ShouldBe("dotnet publish src/Gigtime.Server -c Release -o artifacts/install");
 	}
 
 	[Fact]
@@ -103,6 +127,9 @@ public sealed partial class ReadmeTests
 
 	private static string SnakeCase(string value) =>
 		Regex.Replace(value, "([a-z])([A-Z])", "$1_$2", RegexOptions.CultureInvariant).ToLowerInvariant();
+
+	[GeneratedRegex("`([^`]+)`")]
+	private static partial Regex JsonKeys();
 
 	[GeneratedRegex(@"^\| `(gig [^`]+)` \|", RegexOptions.Multiline)]
 	private static partial Regex CommandRows();

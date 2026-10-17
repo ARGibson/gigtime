@@ -12,7 +12,11 @@ public sealed class UnitSyntaxTests(PublishedFixture published)
 		await using var day = new DaySession(published);
 		day.Environment["XDG_RUNTIME_DIR"] = Path.Combine(day.Root, "runtime space %");
 		Directory.CreateDirectory(day.Environment["XDG_RUNTIME_DIR"]);
-		var installed = await day.SuccessAsync("setup");
+		var directory = Path.Combine(day.Root, "daemon space %");
+		Directory.CreateDirectory(directory);
+		var daemon = Path.Combine(directory, "gigtimed");
+		File.Copy(Path.Combine(published.Application, "gigtimed"), daemon);
+		var installed = await day.SuccessAsync("setup", "--gigtimed", daemon);
 		var root = Path.Combine(day.Root, "verify");
 		var units = Path.Combine(root, "etc/systemd/system");
 		Directory.CreateDirectory(units);
@@ -27,7 +31,6 @@ public sealed class UnitSyntaxTests(PublishedFixture published)
 		foreach (var (key, name) in new[] { ("service_unit", "gigtimed.service"), ("socket_unit", "gigtimed.socket") })
 			File.Copy(installed.GetProperty(key).GetString()!, Path.Combine(units, name));
 
-		var daemon = Path.Combine(published.Application, "gigtimed");
 		var mirror = Path.Combine(root, daemon.TrimStart(Path.DirectorySeparatorChar));
 		Directory.CreateDirectory(Path.GetDirectoryName(mirror)!);
 		File.Copy(daemon, mirror);

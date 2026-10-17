@@ -32,6 +32,8 @@ internal static class SetupCommands
 				{
 					var daemon = Path.GetFullPath(r.GetValue<string>("--gigtimed") ?? Path.Combine(Path.GetDirectoryName(executable())!, "gigtimed"));
 
+					LinuxServiceInstaller.ValidateExecutablePath(daemon);
+
 					if (!File.Exists(daemon))
 						return exchange.Fail("setup", ErrorCodes.Config, "gigtimed executable is missing: " + daemon, r.GetValue(json));
 

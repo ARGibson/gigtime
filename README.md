@@ -21,13 +21,14 @@ the repository's configured nuget.org source:
 dotnet restore --locked-mode
 dotnet build --no-restore
 dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true -o artifacts/install
-dotnet publish src/Gigtime.Server -c Release -r linux-x64 -o artifacts/install
+dotnet publish src/Gigtime.Server -c Release -o artifacts/install
 ```
 
 Keep the entire install directory, including the service's DLLs and dependency files.
 Add it to `PATH`, then run `gig setup`. The installed `gig` resolves its directory through
 `/proc/self/exe` and expects an executable `gigtimed` beside it. `gig setup --gigtimed
-/absolute/path/gigtimed` overrides that location. A missing/non-executable daemon exits
+/absolute/path/gigtimed` overrides that location. Daemon paths containing `"`, `\` or `$` are refused; spaces and `%` are supported.
+A missing/non-executable daemon exits
 with `config` (5), naming the path.
 
 Setup writes `gigtimed.service` and `gigtimed.socket` under
@@ -135,6 +136,9 @@ explicit null unless the envelope's success/failure omission rule applies.
 
 | Data shape | JSON keys |
 |---|---|
+| Envelope | `ok`, `command`, `data`, `error` |
+| Error | `code`, `message`, `state`, `hint` |
+| Error state | `task_id`, `state`, `command` |
 | Defaults (`defaults show/set`) | `timezone`, `week_starts`, `rounding` |
 | Client (`client add/set`, entries of `client list`) | `id`, `key`, `name`, `currency`, `timezone`, `rounding`, `archived` |
 | Client list | `clients` array |

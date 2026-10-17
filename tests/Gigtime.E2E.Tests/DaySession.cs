@@ -56,6 +56,7 @@ internal sealed class DaySession : IAsyncDisposable
 		};
 
 		foreach (var (key, value) in Environment) start.Environment[key] = value;
+		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");
 		start.Environment.Remove("LISTEN_PID");
 		start.Environment.Remove("LISTEN_FDS");
 		server = Process.Start(start)!;
@@ -99,6 +100,18 @@ internal sealed class DaySession : IAsyncDisposable
 		Root,
 		Environment,
 		TimeSpan.FromSeconds(20));
+
+	internal async Task<CommandResult> HumanAsync(params string[] arguments)
+	{
+		var result = await GigAsync(arguments);
+		result.ExitCode.ShouldBe(0, result.Output + result.Error);
+		result.Error.ShouldBeEmpty();
+		result.Output.ShouldNotBeEmpty();
+		result.Output.ShouldNotContain("\u001b");
+		result.Output.ShouldNotStartWith("{");
+
+		return result;
+	}
 
 	internal async Task<JsonElement> SuccessAsync(params string[] arguments)
 	{

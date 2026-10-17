@@ -19,6 +19,7 @@ internal static class CommandProcess
 
 		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		foreach (var (key, value) in environment) start.Environment[key] = value;
+		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");
 		start.Environment.Remove("LISTEN_PID");
 		start.Environment.Remove("LISTEN_FDS");
 		using var process = Process.Start(start)!;

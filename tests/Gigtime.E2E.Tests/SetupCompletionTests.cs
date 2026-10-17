@@ -137,26 +137,40 @@ public sealed class SetupCompletionTests(PublishedFixture published)
 		await File.WriteAllTextAsync(path, script.Output, TestContext.Current.CancellationToken);
 		day.Environment["PATH"] = published.Application + Path.PathSeparator + day.Environment["PATH"];
 
-		// #5: replace completion UI primitives, preserving the actual zsh function and live subprocesses.
-		var driver = "compdef() { :; }; source \"$1\"; _describe() { print -rl -- $commands; }; "
-			+ "compadd() { [[ $1 == -- ]] && shift; print -rl -- $@; }; "
-			+ "_arguments() { if [[ $PREFIX == --* ]]; then print -rl -- $flags; else state=live; fi; }; "
-			+ "words=(gig ''); CURRENT=2; PREFIX=''; _gig; "
-			+ "words=(gig report --); CURRENT=3; PREFIX=--; _gig; "
-			+ "words=(gig start ac); CURRENT=3; PREFIX=ac; _gig; "
-			+ "words=(gig start acme wo); CURRENT=4; PREFIX=wo; _gig;";
+		using var resource = typeof(SetupCompletionTests).Assembly.GetManifestResourceStream("gig.e2e.completion.zsh")!;
+		using var reader = new StreamReader(resource);
+		var driver = Path.Combine(day.Root, "first-tab.zsh");
 
-		var result = await CommandProcess.RunAsync("zsh",
-			["-f", "-c", driver, "zsh", path],
-			day.Root,
-			day.Environment,
-			TimeSpan.FromSeconds(10));
+		await File.WriteAllTextAsync(driver,
+			await reader.ReadToEndAsync(TestContext.Current.CancellationToken),
+			TestContext.Current.CancellationToken);
 
-		result.ExitCode.ShouldBe(0, result.Error);
+		var result = await CommandProcess.RunAsync("zsh", ["-f", driver, day.Root], day.Root, day.Environment, TimeSpan.FromSeconds(20));
+		result.ExitCode.ShouldBe(0, result.Output + result.Error);
 		result.Error.ShouldBeEmpty();
-		result.Output.ShouldContain("start:start a task");
-		result.Output.ShouldContain("--range[");
-		result.Output.ShouldContain("acme\n");
-		result.Output.ShouldContain("work\n");
+		result.Output.ShouldContain("RESULT:gig start :END");
+		result.Output.ShouldContain("RESULT:gig report --range :END");
+		result.Output.ShouldContain("RESULT:gig start acme :END");
+		result.Output.ShouldContain("RESULT:gig start acme work :END");
+	}
+
+	[Theory]
+	[InlineData("\"")]
+	[InlineData("\\")]
+	[InlineData("$")]
+	public async Task Setup_rejects_unsupported_executable_paths_as_config_without_manager_calls(string character)
+	{
+		await using var day = new DaySession(published);
+		var directory = Path.Combine(day.Root, "daemon" + character);
+		Directory.CreateDirectory(directory);
+		var daemon = Path.Combine(directory, "gigtimed");
+		File.Copy(Path.Combine(published.Application, "gigtimed"), daemon);
+		await day.RefusalAsync(5, "config", "setup", "--gigtimed", daemon);
+		var human = await day.GigAsync("setup", "--gigtimed", daemon);
+		human.ExitCode.ShouldBe(5);
+		human.Error.ShouldContain(daemon);
+		human.Error.ShouldContain("character '" + character + "'");
+		File.Exists(day.Environment["GIGTIME_TEST_SYSTEMCTL_LOG"]).ShouldBeFalse();
+		Directory.Exists(Path.Combine(day.Environment["XDG_CONFIG_HOME"], "systemd")).ShouldBeFalse();
 	}
 }

@@ -9,12 +9,14 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 
 	public async Task<ServiceInstallation> InstallAsync(string executable, CancellationToken cancellationToken = default)
 	{
+		ValidateExecutablePath(executable);
+
 		var directory = Path.Combine(paths.ConfigDirectory, "systemd", "user");
 		Directory.CreateDirectory(directory);
 		var socket = Path.Combine(paths.RuntimeDirectory, "gigtime", "gigtimed.sock");
 
 		var service = "[Unit]\nDescription=gigtime time tracking\n\n[Service]\nExecStart="
-			+ Quote(executable.Replace("$", "$$", StringComparison.Ordinal))
+			+ Quote(executable)
 			+ "\nEnvironment=" + Quote("XDG_RUNTIME_DIR=" + paths.RuntimeDirectory)
 			+ "\nEnvironment=" + Quote("XDG_DATA_HOME=" + paths.DataDirectory)
 			+ "\nEnvironment=" + Quote("XDG_CONFIG_HOME=" + paths.ConfigDirectory) + "\n\n[Install]\nWantedBy=default.target\n";
@@ -49,6 +51,15 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 		await RequireAsync(["enable", "--now", "gigtimed.service"], cancellationToken);
 
 		return new(true, false);
+	}
+
+	public static void ValidateExecutablePath(string executable)
+	{
+		foreach (var character in new[] { '"', '\\', '$' })
+		{
+			if (executable.Contains(character, StringComparison.Ordinal))
+				throw new IOException($"gigtimed path '{executable}' contains unsupported character '{character}'.");
+		}
 	}
 
 	private async Task RequireAsync(string[] arguments, CancellationToken cancellationToken)
