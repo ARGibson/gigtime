@@ -52,6 +52,7 @@ public sealed class LifecycleTests
 		(TaskState.Missing, _) => "gig start",
 		(TaskState.Running or TaskState.Paused, "void" or "start" or "add") => "gig stop",
 		(TaskState.Paused, "pause") => "gig resume",
+		(TaskState.Stopped or TaskState.Voided, "start" or "add") => null,
 		(TaskState.Stopped or TaskState.Voided, _) => "gig start",
 		_ => null
 	  };
@@ -64,6 +65,8 @@ public sealed class LifecycleTests
 		  (expectedHint is null ? "" : $" Use {expectedHint}.")
 	  };
 	  result.Error.Message.ShouldBe(expectedMessage);
+	  if (state is TaskState.Stopped or TaskState.Voided && command is "start" or "add")
+		result.Error.Message.ShouldNotContain("Use gig start");
 	}
   }
 
@@ -138,6 +141,7 @@ public sealed class LifecycleTests
 	s.Send(new ResumeTask(TaskScenario.At.AddSeconds(20)));
 	s.Send(new ChangeTaskRef(null));
 	s.Send(new StopTask(TaskScenario.At.AddSeconds(40)));
+	s.Send(new AmendInterval(2, End: TaskScenario.At.AddSeconds(50)));
 	s.Send(new VoidTask("duplicate"));
 	var task = new TaskView(); var tracker = new OpenTask();
 	foreach (var e in s.TaskEvents) task.Evolve(e);

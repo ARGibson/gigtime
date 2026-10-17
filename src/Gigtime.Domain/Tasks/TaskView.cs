@@ -51,6 +51,7 @@ public sealed class TaskView
 	var old = Timeline[index];
 	Timeline[index] = old with { Start = e.Start ?? old.Start, End = e.End ?? old.End };
 	StartedAt = Timeline[0].Start;
+	if (State == TaskState.Stopped) StoppedAt = Timeline[^1].End;
   }
   public void Apply(TaskReassigned e) => ProjectId = e.ProjectId;
   public void Apply(TaskRefChanged e) => Ref = e.Ref;

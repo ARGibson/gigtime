@@ -151,6 +151,49 @@ public sealed class CorrectionTests
   }
 
   [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public void Amending_the_final_interval_updates_the_stop_time_for_stopped_and_recorded_tasks(bool recorded)
+  {
+	var s = new TaskScenario();
+	if (recorded)
+	  s.Send(new RecordTask("7f3a9c", s.Catalogue.ProjectId, null, TaskScenario.At, TaskScenario.At.AddSeconds(60)));
+	else
+	{
+	  s.Start();
+	  s.Send(new PauseTask(TaskScenario.At.AddSeconds(20)));
+	  s.Send(new ResumeTask(TaskScenario.At.AddSeconds(40)));
+	  s.Send(new StopTask(TaskScenario.At.AddSeconds(60)));
+	}
+	var end = TaskScenario.At.AddSeconds(120);
+	s.Send(new AmendInterval(s.Task.Timeline.Count, End: end));
+	s.Task.StoppedAt.ShouldBe(end);
+	s.Task.StoppedAt.ShouldBe(s.Task.Timeline[^1].End);
+	// #1: amending an earlier boundary still uses the final interval's endpoint.
+	s.Send(new AmendInterval(1, Start: TaskScenario.At.AddSeconds(-1)));
+	s.Task.StoppedAt.ShouldBe(end);
+  }
+
+  [Theory]
+  [InlineData(TaskState.Running)]
+  [InlineData(TaskState.Paused)]
+  [InlineData(TaskState.Voided)]
+  public void Amendments_leave_non_stopped_tasks_stop_times_unchanged(TaskState state)
+  {
+	var s = new TaskScenario(); s.Reach(state);
+	var before = s.Task.StoppedAt;
+	var command = new AmendInterval(1, Start: TaskScenario.At.AddSeconds(-1));
+	if (state == TaskState.Voided)
+	{
+	  var result = s.Decide(command);
+	  result.Error!.Code.ShouldBe("invalid_transition");
+	  result.Events.ShouldBeEmpty();
+	}
+	else s.Send(command);
+	s.Task.StoppedAt.ShouldBe(before);
+  }
+
+  [Theory]
   [InlineData(0, 0)]
   [InlineData(29, 0)]
   [InlineData(30, 60)]

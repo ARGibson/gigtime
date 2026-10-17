@@ -108,7 +108,8 @@ public static class TaskDecider
 	{
 	  (TaskState.Running or TaskState.Paused, StartTask or RecordTask or VoidTask) => "gig stop",
 	  (TaskState.Paused, PauseTask) => "gig resume",
-	  (TaskState.Stopped, StartTask or RecordTask or PauseTask or ResumeTask or StopTask) => "gig start",
+	  (TaskState.Stopped or TaskState.Voided, StartTask or RecordTask) => null,
+	  (TaskState.Stopped, PauseTask or ResumeTask or StopTask) => "gig start",
 	  (TaskState.Voided, _) => "gig start",
 	  _ => null
 	};

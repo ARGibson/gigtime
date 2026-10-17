@@ -123,6 +123,28 @@ public sealed class JsonContractTests
 	Should.Throw<JsonException>(() => JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.RecordTaskRequest));
   }
 
+  [Theory]
+  [InlineData("start")]
+  [InlineData("end")]
+  public void Nullable_amendment_instants_reject_offset_free_input(string field)
+  {
+	var json = "{\"interval\":1,\"" + field + "\":\"2026-03-02T09:00:00\"}";
+	Should.Throw<JsonException>(() => JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.AmendTaskRequest));
+  }
+
+  [Theory]
+  [InlineData("2026-03-02T09:00:00Z", "2026-03-02T09:01:00Z")]
+  [InlineData("2026-03-02T10:00:00+01:00", "2026-03-02T04:01:00-05:00")]
+  public void Nullable_amendment_instants_accept_explicit_offsets(string start, string end)
+  {
+	var json = "{\"interval\":1,\"start\":\"" + start + "\",\"end\":\"" + end + "\"}";
+	var request = JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.AmendTaskRequest)!;
+	request.Start.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture));
+	request.End.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:01:00Z", CultureInfo.InvariantCulture));
+	request.Start!.Value.Offset.ShouldBe(TimeSpan.Zero);
+	request.End!.Value.Offset.ShouldBe(TimeSpan.Zero);
+  }
+
   [Fact]
   public void Duration_display_keeps_total_hours_instead_of_wrapping_at_a_day()
   {

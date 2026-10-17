@@ -28,6 +28,23 @@ public sealed class ReportTests
   }
 
   [Fact]
+  public void Amending_the_stop_time_moves_report_membership_across_the_clients_week_boundary()
+  {
+	var s = new TaskScenario();
+	s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Timezone: Change.Set<string?>("America/New_York")));
+	s.Send(new StartTask("7f3a9c", s.Catalogue.ProjectId, null, At("2026-03-02T04:59:00Z")));
+	s.Send(new StopTask(At("2026-03-02T04:59:30Z")));
+	var previousWeek = new ReportQuery(At("2026-03-01T12:00:00Z"));
+	var nextWeek = new ReportQuery(At("2026-03-02T06:00:00Z"));
+	ReportMath.Calculate([s.Task], s.Catalogue.State, previousWeek).Single().RawSeconds.ShouldBe(30);
+	ReportMath.Calculate([s.Task], s.Catalogue.State, nextWeek).ShouldBeEmpty();
+	s.Send(new AmendInterval(1, End: At("2026-03-02T05:00:00Z")));
+	s.Task.StoppedAt.ShouldBe(At("2026-03-02T05:00:00Z"));
+	ReportMath.Calculate([s.Task], s.Catalogue.State, previousWeek).ShouldBeEmpty();
+	ReportMath.Calculate([s.Task], s.Catalogue.State, nextWeek).Single().RawSeconds.ShouldBe(60);
+  }
+
+  [Fact]
   public void Configured_week_start_and_dst_use_local_dates()
   {
 	var s = new TaskScenario();
