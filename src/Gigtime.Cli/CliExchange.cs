@@ -52,10 +52,23 @@ internal sealed class CliExchange(
 			Content = content
 		};
 
+		string socketPath;
+
 		try
 		{
-			var socketPath = Path.Combine(paths().RuntimeDirectory, "gigtime", "gigtimed.sock");
+			socketPath = Path.Combine(paths().RuntimeDirectory, "gigtime", "gigtimed.sock");
+		}
+		catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+		{
+			return Fail(command,
+				ErrorCodes.Unavailable,
+				"Cannot resolve the gigtimed runtime directory: " + exception.Message,
+				asJson,
+				"Choose a private XDG_RUNTIME_DIR, or correct the reported fallback directory's ownership and mode (0700).");
+		}
 
+		try
+		{
 			using var transport = new SocketsHttpHandler
 			{
 				ConnectCallback = async (_, token) =>
@@ -83,13 +96,17 @@ internal sealed class CliExchange(
 			};
 
 			using var response = await client.SendAsync(request, cancellationToken);
-			var envelope = await response.Content.ReadFromJsonAsync(responseType, cancellationToken);
+			var body = await response.Content.ReadAsStringAsync(cancellationToken);
+			var envelope = JsonSerializer.Deserialize(body, responseType);
 
-			if (envelope is null || (envelope.Ok ? !response.IsSuccessStatusCode || envelope.Data is null : envelope.Error is null))
+			if (envelope is null || string.IsNullOrWhiteSpace(envelope.Command)
+					|| (envelope.Ok ? !response.IsSuccessStatusCode || envelope.Data is null : envelope.Error is null))
+			{
 				return Fail(command, ErrorCodes.Internal, "The service returned an invalid envelope.", asJson);
+			}
 
-			if (asJson) output.WriteLine(JsonSerializer.Serialize(envelope, responseType));
-			else if (envelope.Ok) new HumanOutput(output, isTerminal, noColor).Write(envelope.Data!);
+			if (asJson) output.Write(body);
+			else if (envelope.Ok) new HumanOutput(output, isTerminal, noColor).Write(envelope.Data!, envelope.Command);
 			else WriteError(envelope.Error!);
 
 			return envelope.Ok ? ExitCodes.Success : ExitCodes.FromErrorCode(envelope.Error!.Code);
@@ -97,7 +114,11 @@ internal sealed class CliExchange(
 		catch (Exception exception) when (exception is HttpRequestException or IOException or SocketException or UnauthorizedAccessException
 																				or OperationCanceledException)
 		{
-			return Fail(command, ErrorCodes.Unavailable, "Cannot reach gigtimed: " + exception.Message, asJson, "Run gig setup.");
+			return Fail(command,
+				ErrorCodes.Unavailable,
+				"Cannot reach gigtimed at " + socketPath + ": " + exception.Message,
+				asJson,
+				"Run gig setup.");
 		}
 		catch (JsonException)
 		{

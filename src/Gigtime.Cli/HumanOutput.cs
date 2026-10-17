@@ -25,7 +25,7 @@ internal sealed class HumanOutput
 		console.Profile.Width = 180;
 	}
 
-	internal void Write(object data)
+	internal void Write(object data, string command)
 	{
 		switch (data)
 		{
@@ -51,6 +51,7 @@ internal sealed class HumanOutput
 				break;
 			case TaskDto task:
 				Task(task);
+				if (command == "stop") console.WriteLine("Submit the rounded figure.");
 
 				break;
 			case StatusDto { Task: { } task }:
@@ -62,11 +63,11 @@ internal sealed class HumanOutput
 
 				break;
 			case TasksDto tasks:
-				Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded", "Submit"],
+				Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
 					tasks.Tasks.Select(t => new[]
 					{
 						t.Id, t.Client.Key, t.Project.Key, t.Ref ?? "", t.State, DurationText.Format(t.RawSeconds),
-						DurationText.Format(t.RoundedSeconds), t.Display,
+						DurationText.Format(t.RoundedSeconds),
 					}));
 
 				break;
@@ -95,12 +96,12 @@ internal sealed class HumanOutput
 
 	private void Task(TaskDto task)
 	{
-		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded", "Submit"],
+		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
 		[
 			new[]
 			{
 				task.Id, task.Client.Key, task.Project.Key, task.Ref ?? "", task.State, DurationText.Format(task.RawSeconds),
-				DurationText.Format(task.RoundedSeconds), task.Display,
+				DurationText.Format(task.RoundedSeconds),
 			}
 		]);
 

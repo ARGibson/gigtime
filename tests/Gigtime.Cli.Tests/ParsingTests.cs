@@ -98,18 +98,56 @@ public sealed class ParsingTests
 				var envelope = JsonSerializer.Deserialize(output.ToString(), GigtimeJsonContext.Default.AcknowledgementResponse)!;
 				envelope.Command.ShouldBe("status");
 				envelope.Error!.Code.ShouldBe("unavailable");
+				envelope.Error.Message.ShouldContain(Path.Combine(directory, "gigtime", "gigtimed.sock"));
 				envelope.Error.Hint!.ShouldContain("gig setup");
 			}
 			else
 			{
 				output.ToString().ShouldBeEmpty();
 				error.ToString().ShouldContain("unavailable");
+				error.ToString().ShouldContain(Path.Combine(directory, "gigtime", "gigtimed.sock"));
 				error.ToString().ShouldContain("gig setup");
 			}
 		}
 		finally
 		{
 			Directory.Delete(directory, true);
+		}
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public async Task Runtime_directory_refusal_has_directory_repair_guidance_without_setup_hint(bool asJson)
+	{
+		var directory = Path.Combine(Path.GetTempPath(), "gig-cli-invalid-" + Guid.NewGuid().ToString("N"));
+		using var output = new StringWriter(CultureInfo.InvariantCulture);
+		using var error = new StringWriter(CultureInfo.InvariantCulture);
+
+		var app = new CliApplication(output,
+			error,
+			false,
+			false,
+			() => throw new IOException($"Runtime fallback '{directory}' must be owned by the current user with mode 0700."));
+
+		(await app.RunAsync(asJson ? ["status", "--json"] : ["status"], TestContext.Current.CancellationToken)).ShouldBe(6);
+
+		if (asJson)
+		{
+			var envelope = JsonSerializer.Deserialize(output.ToString(), GigtimeJsonContext.Default.AcknowledgementResponse)!;
+			envelope.Error!.Code.ShouldBe("unavailable");
+			envelope.Error.Message.ShouldContain(directory);
+			envelope.Error.Hint!.ShouldContain("ownership");
+			envelope.Error.Hint!.ShouldContain("0700");
+			output.ToString().ShouldNotContain("gig setup");
+		}
+		else
+		{
+			output.ToString().ShouldBeEmpty();
+			error.ToString().ShouldContain(directory);
+			error.ToString().ShouldContain("ownership");
+			error.ToString().ShouldContain("0700");
+			error.ToString().ShouldNotContain("gig setup");
 		}
 	}
 }

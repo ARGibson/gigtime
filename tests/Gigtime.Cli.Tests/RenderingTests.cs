@@ -77,9 +77,53 @@ public sealed class RenderingTests
 	}
 
 	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task Json_output_preserves_the_original_envelope_including_extra_fields(bool ok)
+	{
+		var response = ok
+			? " { \"ok\": true, \"command\": \"status\", \"data\": { \"task\": null }, \"extra\": { \"version\": 2 } }\n"
+			: " { \"ok\": false, \"command\": \"status\", \"error\": { \"code\": \"conflict\", \"message\": \"busy\" }, \"extra\": 2 }\n";
+
+		await using var server = await FakeServer.StartAsync(response, ok ? 200 : 409);
+		using var output = new StringWriter(CultureInfo.InvariantCulture);
+		using var error = new StringWriter(CultureInfo.InvariantCulture);
+		var paths = server.Paths;
+		var app = new CliApplication(output, error, false, false, () => paths);
+
+		(await app.RunAsync(["status", "--json"], TestContext.Current.CancellationToken)).ShouldBe(ok ? 0 : 7);
+		output.ToString().ShouldBe(response);
+		output.ToString().ShouldContain("extra");
+	}
+
+	[Fact]
+	public async Task Stop_keeps_raw_and_rounded_with_a_submission_note()
+	{
+		await using var server = await FakeServer.StartAsync(CommandCases.Response("stop"));
+		using var output = new StringWriter(CultureInfo.InvariantCulture);
+		using var error = new StringWriter(CultureInfo.InvariantCulture);
+		var paths = server.Paths;
+		var app = new CliApplication(output, error, false, false, () => paths);
+
+		(await app.RunAsync(["stop"], TestContext.Current.CancellationToken)).ShouldBe(0);
+		output.ToString().ShouldContain("Raw");
+		output.ToString().ShouldContain("Rounded");
+		output.ToString().ShouldContain("01:01:01");
+		output.ToString().ShouldContain("01:15:00");
+		output.ToString().ShouldContain("Submit the rounded figure.");
+
+		output
+			.ToString()
+			.Split(Environment.NewLine)
+			.Single(line => line.Contains("Rounded", StringComparison.Ordinal))
+			.ShouldNotContain("Submit");
+	}
+
+	[Theory]
 	[InlineData("not json")]
 	[InlineData("null")]
 	[InlineData("{}")]
+	[InlineData("{\"ok\":true,\"data\":{\"task\":null}}")]
 	[InlineData("{\"ok\":true,\"command\":\"status\"}")]
 	public async Task Malformed_responses_are_internal_errors(string response)
 	{
