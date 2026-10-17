@@ -2,6 +2,9 @@
 // nuget.org less than 24 hours ago, or cannot be found there.
 // Run from the repo root: dotnet run scripts/check-package-age.cs
 
+// File-based apps default to Native AOT, which restores compiler packages; this script needs none.
+#:property PublishAot=false
+
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
