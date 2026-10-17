@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Gigtime.Contracts/Gigtime.Contracts.csproj" />
+    <Project Path="src/Gigtime.Domain/Gigtime.Domain.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Gigtime.Domain.Tests/Gigtime.Domain.Tests.csproj" />
+  </Folder>
+</Solution>
