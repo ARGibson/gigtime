@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<AssemblyName>gig</AssemblyName>
+		<IsAotCompatible>true</IsAotCompatible>
+		<!-- #3: include the linux AOT packs in locked restores before CI publishes. -->
+		<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+		<PublishAot>true</PublishAot>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj" />
+		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Spectre.Console" />
+	  <PackageReference Include="System.CommandLine" />
+	</ItemGroup>
+</Project>

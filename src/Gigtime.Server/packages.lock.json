@@ -115,14 +115,6 @@
         "resolved": "3.50.4.5",
         "contentHash": "UtnipXhJYZKQOQIfpws/msLK7IRhMplE1CZCaZLIQXRnGD474QVpO/J9nMlQQY8NZueGz1aidjoxDRnrC1NT3Q=="
       },
-      "Spectre.Console": {
-        "type": "Transitive",
-        "resolved": "0.55.0",
-        "contentHash": "2TVhUHFsDux0Z+y2Hv4bFsOMuON4SuotEEKkMparFkp5Rm259naaaEQrN4Sv6C1cbsiGKPjfkJDGgUp+hZPjTw==",
-        "dependencies": {
-          "Spectre.Console.Ansi": "0.55.0"
-        }
-      },
       "Spectre.Console.Ansi": {
         "type": "Transitive",
         "resolved": "0.55.0",
@@ -239,6 +231,15 @@
         "contentHash": "+y/z+prDwr7dbxLSUscT7U2fBpeq62gwetntxCGJ+c93/8NGH3gGTA+OxqLQ4aTutdyEhRq63Mj+PNSKwPdfAQ==",
         "dependencies": {
           "JasperFx": "2.90.1"
+        }
+      },
+      "Spectre.Console": {
+        "type": "CentralTransitive",
+        "requested": "[0.57.2, )",
+        "resolved": "0.55.0",
+        "contentHash": "2TVhUHFsDux0Z+y2Hv4bFsOMuON4SuotEEKkMparFkp5Rm259naaaEQrN4Sv6C1cbsiGKPjfkJDGgUp+hZPjTw==",
+        "dependencies": {
+          "Spectre.Console.Ansi": "0.55.0"
         }
       }
     }
