@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<AssemblyName>gigtimed</AssemblyName>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="../Gigtime.Domain/Gigtime.Domain.csproj" />
+		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj" />
+		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Fisher" />
+	  <PackageReference Include="WolverineFx.Fisher" />
+	  <PackageReference Include="WolverineFx.Http" />
+	  <PackageReference Include="WolverineFx.Http.Fisher" />
+	</ItemGroup>
+</Project>
