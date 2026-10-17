@@ -11,7 +11,6 @@
     <!-- The MTP v2 variant matches the SDK's Microsoft.Testing.Platform runner. -->
     <PackageVersion Include="WolverineFx.Fisher" Version="6.51.0" />
     <PackageVersion Include="WolverineFx.Http" Version="6.51.0" />
-    <PackageVersion Include="WolverineFx.Http.Fisher" Version="6.51.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 </Project>

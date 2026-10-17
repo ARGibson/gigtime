@@ -11,6 +11,5 @@
 	  <PackageReference Include="Fisher" />
 	  <PackageReference Include="WolverineFx.Fisher" />
 	  <PackageReference Include="WolverineFx.Http" />
-	  <PackageReference Include="WolverineFx.Http.Fisher" />
 	</ItemGroup>
 </Project>

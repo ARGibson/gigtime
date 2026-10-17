@@ -39,16 +39,6 @@
           "WolverineFx": "6.51.0"
         }
       },
-      "WolverineFx.Http.Fisher": {
-        "type": "Direct",
-        "requested": "[6.51.0, )",
-        "resolved": "6.51.0",
-        "contentHash": "FzHICixcbOca/Ymu6yEshZ4uX7V7CGvnLyaN1LYBvENbxLICMt53Vrmvc0BwuaCfNwfcCexY6wig4RgNmVecxQ==",
-        "dependencies": {
-          "WolverineFx.Fisher": "6.51.0",
-          "WolverineFx.Http": "6.51.0"
-        }
-      },
       "Asp.Versioning.Abstractions": {
         "type": "Transitive",
         "resolved": "10.0.0",
