@@ -123,10 +123,11 @@ resharper_braces_for_using = required
 resharper_braces_for_lock = required
 resharper_braces_for_fixed = required
 resharper_empty_block_style = together_same_line
-# Without these, Rider joins multi-line initialisers, which the build rejects
-# (checked with Rider 2026.2 against dotnet format, SDK 10.0.302).
-resharper_keep_existing_initializer_arrangement = true
-resharper_place_simple_initializer_on_single_line = false
+# Initialisers: one member per line, always. Rider otherwise packs members onto one line
+# inside a multi-line initialiser, which the build rejects (Rider 2026.2, SDK 10.0.302).
+resharper_keep_existing_initializer_arrangement = false
+resharper_place_simple_initializer_on_single_line = true
+resharper_wrap_object_and_collection_initializer_style = chop_always
 resharper_trailing_comma_in_multiline_lists = true
 # Rider: wrap long chains one call per line with the dot leading; break before ? and :.
 resharper_csharp_max_line_length = 140
@@ -136,6 +137,7 @@ resharper_csharp_wrap_before_first_method_call = true
 resharper_csharp_wrap_before_ternary_opsigns = true
 resharper_csharp_wrap_before_binary_opsign = true
 resharper_csharp_wrap_parameters_style = chop_if_long
+resharper_csharp_wrap_arguments_style = chop_if_long
 resharper_csharp_wrap_before_arrow_with_expressions = false
 # Rider: continuation lines indent with tabs; no space alignment after tabs.
 resharper_csharp_alignment_tab_fill_style = use_tabs_only

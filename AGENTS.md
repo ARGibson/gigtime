@@ -78,7 +78,7 @@ gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property bel
 - **Order members:** fields and properties, constructors, public methods, then private helpers below their first caller.
 - **Prefer `switch` expressions for mapping a value; use a `switch` statement for side effects.**
 - **Check null with patterns:** `is null`, `is not null`, `is { } value`; never `== null` or `!= null`.
-- **With JetBrains Rider, or its MCP server, reformat and lint each changed file before committing** (`reformat_file`, then `lint_files`); Rider reads the same `.editorconfig`.
+- **Format each changed file in this order before committing:** Rider's reformat (`reformat_file` through its MCP server, when you have Rider), then `dotnet format`, then Rider's `lint_files`. Rider lays out lines and wraps; `dotnet format` adds what reformat does not, such as braces on a multi-line body. The build's verdict wins: when they disagree, `dotnet format` is right.
 
 ### Handlers and endpoints
 
