@@ -1,11 +1,13 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Gigtime.Cli/Gigtime.Cli.csproj" />
     <Project Path="src/Gigtime.Contracts/Gigtime.Contracts.csproj" />
     <Project Path="src/Gigtime.Domain/Gigtime.Domain.csproj" />
     <Project Path="src/Gigtime.Platform/Gigtime.Platform.csproj" />
     <Project Path="src/Gigtime.Server/Gigtime.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Gigtime.Cli.Tests/Gigtime.Cli.Tests.csproj" />
     <Project Path="tests/Gigtime.Domain.Tests/Gigtime.Domain.Tests.csproj" />
     <Project Path="tests/Gigtime.Server.Tests/Gigtime.Server.Tests.csproj" />
   </Folder>

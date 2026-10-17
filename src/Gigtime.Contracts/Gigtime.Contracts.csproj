@@ -1,5 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot;RuntimeIdentifier">
 	<PropertyGroup>
+		<!-- #3: CLI publish globals must not change this portable library’s locked restore graph. -->
+		<PublishAot>false</PublishAot>
+		<RuntimeIdentifier />
 		<AssemblyName>Gigtime.Contracts</AssemblyName>
 		<!-- Contracts must remain usable by the Native AOT client. -->
 		<IsAotCompatible>true</IsAotCompatible>
