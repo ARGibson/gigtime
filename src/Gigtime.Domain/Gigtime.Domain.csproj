@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<AssemblyName>Gigtime.Domain</AssemblyName>
+	</PropertyGroup>
+	<ItemGroup>
+	  <PackageReference Include="JasperFx.Events" />
+	</ItemGroup>
+</Project>

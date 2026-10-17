@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<ItemGroup>
+	  <ProjectReference Include="..\..\src\Gigtime.Domain\Gigtime.Domain.csproj" />
+	  <ProjectReference Include="..\..\src\Gigtime.Contracts\Gigtime.Contracts.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Shouldly" />
+	  <PackageReference Include="xunit.v3.mtp-v2" />
+	</ItemGroup>
+	<PropertyGroup>
+		<AssemblyName>Gigtime.Domain.Tests</AssemblyName>
+		<OutputType>Exe</OutputType>
+		<IsTestProject>true</IsTestProject>
+		<!-- xUnit v3 runs through Microsoft Testing Platform, including zero-test failures. -->
+		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+	</PropertyGroup>
+</Project>
