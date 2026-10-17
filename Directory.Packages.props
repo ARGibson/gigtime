@@ -1,0 +1,8 @@
+<Project>
+	<PropertyGroup>
+		<!-- Every package version is pinned here, exactly; project files carry no versions. -->
+		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+	</PropertyGroup>
+	<ItemGroup>
+	</ItemGroup>
+</Project>

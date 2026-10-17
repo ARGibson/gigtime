@@ -1,0 +1,21 @@
+<Project>
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<!-- Warnings fail the build so analyzer and style findings cannot accumulate. -->
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<AnalysisLevel>latest-recommended</AnalysisLevel>
+		<!-- Enforce the .editorconfig style rules in the build, not only in dotnet format. -->
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<!-- Lock files pin every transitive package; restores reproduce exactly. -->
+		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+	</PropertyGroup>
+	<PropertyGroup Condition="'$(CI)' == 'true'">
+		<!-- CI refuses a restore that would change a lock file. -->
+		<RestoreLockedMode>true</RestoreLockedMode>
+		<ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+	</PropertyGroup>
+</Project>
