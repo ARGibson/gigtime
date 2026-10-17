@@ -3,6 +3,7 @@ root = true
 [*]
 indent_style = tab
 indent_size = 2
+tab_width = 2
 end_of_line = lf
 charset = utf-8
 insert_final_newline = true
@@ -15,26 +16,161 @@ indent_style = space
 indent_style = space
 trim_trailing_whitespace = false
 
+# C# style. Rules at warning fail the build (TreatWarningsAsErrors + EnforceCodeStyleInBuild);
+# rules at suggestion guide the IDE and agents without failing it. The resharper_* keys
+# make Rider's reformat produce the same layout; the AGENTS.md Style section covers the rest.
 [*.cs]
+
+# Layout: Allman braces. One statement per line is Rider's job (it splits joined statements);
+# the build preserves single-line statements so a same-line if or case body passes.
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+csharp_preserve_single_line_statements = true
+csharp_preserve_single_line_blocks = true
+csharp_prefer_braces = when_multiline:warning
+dotnet_diagnostic.IDE0011.severity = warning
+# Formatting drift fails the build.
+dotnet_diagnostic.IDE0055.severity = warning
+# No double blank lines, and a blank line after every block (both rules are marked experimental).
+dotnet_style_allow_multiple_blank_lines_experimental = false:warning
+dotnet_diagnostic.IDE2000.severity = warning
+dotnet_style_allow_statement_immediately_after_block_experimental = false:warning
+dotnet_diagnostic.IDE2003.severity = warning
+
+# Namespaces and usings.
 csharp_style_namespace_declarations = file_scoped:warning
 dotnet_diagnostic.IDE0161.severity = warning
-csharp_style_var_for_built_in_types = true:suggestion
-csharp_style_var_when_type_is_apparent = true:suggestion
-csharp_style_var_elsewhere = true:suggestion
-dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+csharp_using_directive_placement = outside_namespace:warning
+dotnet_diagnostic.IDE0065.severity = warning
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+# Unused usings fail the build; needs GenerateDocumentationFile (Directory.Build.props).
+dotnet_diagnostic.IDE0005.severity = warning
 
-# Private fields: camelCase, no leading underscore. IDE1006 at warning so the build enforces it.
+# var everywhere.
+csharp_style_var_for_built_in_types = true:warning
+csharp_style_var_when_type_is_apparent = true:warning
+csharp_style_var_elsewhere = true:warning
+dotnet_diagnostic.IDE0007.severity = warning
+
+# No this., explicit access modifiers.
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+dotnet_diagnostic.IDE0003.severity = warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_diagnostic.IDE0040.severity = warning
+
+# Expression bodies for properties and one-line members; never for constructors.
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_accessors = true:suggestion
+csharp_style_expression_bodied_indexers = true:suggestion
+csharp_style_expression_bodied_lambdas = true:suggestion
+csharp_style_expression_bodied_local_functions = when_on_single_line:suggestion
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_operators = when_on_single_line:suggestion
+csharp_style_expression_bodied_constructors = false:suggestion
+
+# Modern constructs.
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_prefer_switch_expression = true:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+dotnet_style_object_initializer = true:suggestion
+dotnet_style_collection_initializer = true:suggestion
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+dotnet_style_null_propagation = true:suggestion
+dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+dotnet_diagnostic.IDE0041.severity = warning
+csharp_style_prefer_null_check_over_type_check = true:warning
+dotnet_diagnostic.IDE0150.severity = warning
+
+# Naming: private fields camelCase with no underscore; constants PascalCase.
+# Rules apply by specificity, so the const rule wins over the private-field rule.
 dotnet_naming_rule.private_fields_camel.symbols = private_fields
 dotnet_naming_rule.private_fields_camel.style = camel_no_prefix
 dotnet_naming_rule.private_fields_camel.severity = warning
 dotnet_naming_symbols.private_fields.applicable_kinds = field
 dotnet_naming_symbols.private_fields.applicable_accessibilities = private, private_protected
 dotnet_naming_style.camel_no_prefix.capitalization = camel_case
+dotnet_naming_rule.constants_pascal.symbols = constants
+dotnet_naming_rule.constants_pascal.style = pascal
+dotnet_naming_rule.constants_pascal.severity = warning
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.applicable_accessibilities = *
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_style.pascal.capitalization = pascal_case
 dotnet_diagnostic.IDE1006.severity = warning
+# Methods marked async end in Async (TAP naming). Test methods are exempt, below.
+dotnet_naming_rule.async_methods_end_in_async.symbols = async_methods
+dotnet_naming_rule.async_methods_end_in_async.style = end_in_async
+dotnet_naming_rule.async_methods_end_in_async.severity = warning
+dotnet_naming_symbols.async_methods.applicable_kinds = method
+dotnet_naming_symbols.async_methods.applicable_accessibilities = *
+dotnet_naming_symbols.async_methods.required_modifiers = async
+dotnet_naming_style.end_in_async.capitalization = pascal_case
+dotnet_naming_style.end_in_async.required_suffix = Async
 
-# Test names are sentences with underscores.
+# Rider: braces only when the body spans lines; a single-statement if or case body may stay on its line.
+resharper_csharp_brace_style = next_line
+resharper_braces_for_ifelse = required_for_multiline
+resharper_braces_for_for = required_for_multiline
+resharper_braces_for_foreach = required_for_multiline
+resharper_braces_for_while = required_for_multiline
+resharper_braces_for_dowhile = required
+resharper_braces_for_using = required
+resharper_braces_for_lock = required
+resharper_braces_for_fixed = required
+resharper_empty_block_style = together_same_line
+# Rider: blank lines around blocks, multi-line statements and jumps split a method into paragraphs.
+resharper_blank_lines_before_block_statements = 1
+resharper_blank_lines_after_block_statements = 1
+resharper_blank_lines_before_multiline_statements = 1
+resharper_blank_lines_after_multiline_statements = 1
+resharper_blank_lines_before_control_transfer_statements = 1
+resharper_blank_lines_after_control_transfer_statements = 1
+# Initialisers: one member per line, always. Rider otherwise packs members onto one line
+# inside a multi-line initialiser, which the build rejects (Rider 2026.2, SDK 10.0.302).
+resharper_keep_existing_initializer_arrangement = false
+resharper_place_simple_initializer_on_single_line = true
+resharper_wrap_object_and_collection_initializer_style = chop_always
+resharper_trailing_comma_in_multiline_lists = true
+# Rider: wrap long chains one call per line with the dot leading; break before ? and :.
+resharper_csharp_max_line_length = 140
+resharper_csharp_wrap_chained_method_calls = chop_if_long
+resharper_csharp_wrap_after_dot_in_method_calls = false
+resharper_csharp_wrap_before_first_method_call = true
+resharper_csharp_wrap_before_ternary_opsigns = true
+resharper_csharp_wrap_before_binary_opsign = true
+resharper_csharp_wrap_parameters_style = chop_if_long
+resharper_csharp_wrap_arguments_style = chop_if_long
+resharper_csharp_wrap_before_arrow_with_expressions = false
+# Rider: continuation lines indent with tabs; no space alignment after tabs.
+resharper_csharp_alignment_tab_fill_style = use_tabs_only
+resharper_csharp_align_multiline_parameter = false
+resharper_csharp_align_multiline_argument = false
+resharper_csharp_align_multiline_calls_chain = false
+resharper_csharp_align_multiline_binary_expressions_chain = false
+resharper_csharp_align_multiline_expression = false
+resharper_csharp_align_multiline_extends_list = false
+resharper_csharp_align_linq_query = false
+
+# Test names are sentences with underscores and carry no Async suffix.
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
+dotnet_naming_rule.async_methods_end_in_async.severity = none
+
+# SDK 10.0.302's formatter rewrites the file-based app directive #:property to "# : property".
+[scripts/**.cs]
+dotnet_diagnostic.IDE0055.severity = none
 
 [**/Internal/Generated/**.cs]
 generated_code = true

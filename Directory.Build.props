@@ -10,6 +10,11 @@
 		<AnalysisLevel>latest-recommended</AnalysisLevel>
 		<!-- Enforce the .editorconfig style rules in the build, not only in dotnet format. -->
 		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<!-- The build reports unused usings (IDE0005) only when it generates XML docs. Docs stay optional, so CS1591 is off; malformed docs (CS1570-CS1574) still fail. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591</NoWarn>
+		<!-- The doc file exists for the analyser only; keep it out of publish output. -->
+		<PublishDocumentationFile>false</PublishDocumentationFile>
 		<!-- Lock files pin every transitive package; restores reproduce exactly. -->
 		<RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 	</PropertyGroup>
