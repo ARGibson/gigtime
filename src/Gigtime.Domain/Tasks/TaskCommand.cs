@@ -1,12 +1,21 @@
 namespace Gigtime.Domain.Tasks;
 
 public abstract record TaskCommand(string Command);
+
 public sealed record StartTask(string TaskId, Guid ProjectId, string? Ref, DateTimeOffset At) : TaskCommand("start");
+
 public sealed record PauseTask(DateTimeOffset At) : TaskCommand("pause");
+
 public sealed record ResumeTask(DateTimeOffset At) : TaskCommand("resume");
+
 public sealed record StopTask(DateTimeOffset At) : TaskCommand("stop");
+
 public sealed record RecordTask(string TaskId, Guid ProjectId, string? Ref, DateTimeOffset Start, DateTimeOffset End) : TaskCommand("add");
+
 public sealed record AmendInterval(int Interval, DateTimeOffset? Start = null, DateTimeOffset? End = null) : TaskCommand("amend");
+
 public sealed record ReassignTask(Guid ProjectId) : TaskCommand("amend");
+
 public sealed record ChangeTaskRef(string? Ref) : TaskCommand("amend");
+
 public sealed record VoidTask(string? Reason = null) : TaskCommand("void");
