@@ -55,6 +55,7 @@ app.MapWolverineEndpoints(options =>
 	options.RejectUnparseableQueryValues = true;
 });
 
+app.MapEventExport();
 app.RestrictSocket();
 
 return await app.RunJasperFxCommands(args);

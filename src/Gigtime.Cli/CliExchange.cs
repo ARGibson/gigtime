@@ -43,7 +43,8 @@ internal sealed class CliExchange(
 		string path,
 		HttpContent? content,
 		JsonTypeInfo<Envelope<T>> responseType,
-		CancellationToken cancellationToken) where T : class
+		CancellationToken cancellationToken,
+		bool stream = false) where T : class
 	{
 		var asJson = parsed.GetValue(json);
 
@@ -95,7 +96,26 @@ internal sealed class CliExchange(
 				Timeout = TimeSpan.FromSeconds(10)
 			};
 
-			using var response = await client.SendAsync(request, cancellationToken);
+			using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+			if (stream && response.IsSuccessStatusCode)
+			{
+				await using var bytes = await response.Content.ReadAsStreamAsync(cancellationToken);
+				using var reader = new StreamReader(bytes);
+
+				while (await reader.ReadLineAsync(cancellationToken) is { } line)
+				{
+					var item = JsonSerializer.Deserialize(line, GigtimeJsonContext.Default.ExportEventDto);
+
+					if (item is null || string.IsNullOrWhiteSpace(item.Type))
+						return Fail(command, ErrorCodes.Internal, "The service returned invalid export data.", asJson);
+
+					output.WriteLine(line);
+				}
+
+				return ExitCodes.Success;
+			}
+
 			var body = await response.Content.ReadAsStringAsync(cancellationToken);
 			var envelope = JsonSerializer.Deserialize(body, responseType);
 
@@ -105,9 +125,19 @@ internal sealed class CliExchange(
 				return Fail(command, ErrorCodes.Internal, "The service returned an invalid envelope.", asJson);
 			}
 
-			if (asJson) output.Write(body);
-			else if (envelope.Ok) new HumanOutput(output, isTerminal, noColor).Write(envelope.Data!, envelope.Command);
-			else WriteError(envelope.Error!);
+			if (asJson)
+			{
+				output.Write(body);
+				if (!body.EndsWith('\n')) output.WriteLine();
+			}
+			else if (envelope.Ok)
+			{
+				new HumanOutput(output, isTerminal, noColor).Write(envelope.Data!, envelope.Command);
+			}
+			else
+			{
+				WriteError(envelope.Error!);
+			}
 
 			return envelope.Ok ? ExitCodes.Success : ExitCodes.FromErrorCode(envelope.Error!.Code);
 		}
@@ -124,6 +154,18 @@ internal sealed class CliExchange(
 		{
 			return Fail(command, ErrorCodes.Internal, "The service returned invalid JSON.", asJson);
 		}
+	}
+
+	internal Task<int> ExportAsync(ParseResult parsed, string path, CancellationToken cancellationToken)
+	{
+		return SendAsync(parsed,
+			"export",
+			HttpMethod.Get,
+			path,
+			null,
+			GigtimeJsonContext.Default.AcknowledgementResponse,
+			cancellationToken,
+			true);
 	}
 
 	internal int Fail(string command, string code, string message, bool asJson, string? hint = null)

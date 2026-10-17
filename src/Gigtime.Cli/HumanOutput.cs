@@ -1,6 +1,7 @@
 using System.Globalization;
 using Gigtime.Contracts;
 using Gigtime.Contracts.Catalogue;
+using Gigtime.Contracts.Reporting;
 using Gigtime.Contracts.Tasks;
 using Spectre.Console;
 
@@ -34,6 +35,10 @@ internal sealed class HumanOutput
 	{
 		switch (data)
 		{
+			case ReportDto report:
+				Report(report);
+
+				break;
 			case DefaultsDto defaults:
 				Table(["Timezone", "Week starts", "Rounding"], [[defaults.Timezone, defaults.WeekStarts, defaults.Rounding]]);
 
@@ -81,6 +86,23 @@ internal sealed class HumanOutput
 
 				break;
 		}
+	}
+
+	private void Report(ReportDto report)
+	{
+		Table(["Client", "Project", "Currency", "Raw", "Rounded", "Estimated earnings"],
+			report.Totals.Select(t => new[]
+			{
+				t.Client.Key, t.Project.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
+				t.EstimatedEarnings?.Rounded ?? "not rated",
+			}));
+
+		Table(["Client total", "Currency", "Raw", "Rounded", "Estimated earnings"],
+			report.Clients.Select(t => new[]
+			{
+				t.Client.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
+				t.EstimatedEarnings?.Rounded ?? "not rated",
+			}));
 	}
 
 	private void Clients(IEnumerable<ClientDto> clients)
