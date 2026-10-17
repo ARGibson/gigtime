@@ -21,7 +21,8 @@ trim_trailing_whitespace = false
 # make Rider's reformat produce the same layout; the AGENTS.md Style section covers the rest.
 [*.cs]
 
-# Layout: Allman braces, one statement per line.
+# Layout: Allman braces. One statement per line is Rider's job (it splits joined statements);
+# the build preserves single-line statements so a same-line if or case body passes.
 csharp_new_line_before_open_brace = all
 csharp_new_line_before_else = true
 csharp_new_line_before_catch = true
@@ -31,7 +32,7 @@ csharp_new_line_before_members_in_anonymous_types = true
 csharp_new_line_between_query_expression_clauses = true
 csharp_indent_case_contents = true
 csharp_indent_switch_labels = true
-csharp_preserve_single_line_statements = false
+csharp_preserve_single_line_statements = true
 csharp_preserve_single_line_blocks = true
 csharp_prefer_braces = when_multiline:warning
 dotnet_diagnostic.IDE0011.severity = warning
@@ -111,7 +112,7 @@ dotnet_naming_symbols.async_methods.required_modifiers = async
 dotnet_naming_style.end_in_async.capitalization = pascal_case
 dotnet_naming_style.end_in_async.required_suffix = Async
 
-# Rider: braces only when the body spans lines; a single-statement body goes on the next line, unbraced.
+# Rider: braces only when the body spans lines; a single-statement if or case body may stay on its line.
 resharper_csharp_brace_style = next_line
 resharper_braces_for_ifelse = required_for_multiline
 resharper_braces_for_for = required_for_multiline
@@ -121,12 +122,9 @@ resharper_braces_for_dowhile = required
 resharper_braces_for_using = required
 resharper_braces_for_lock = required
 resharper_braces_for_fixed = required
-resharper_place_simple_embedded_statement_on_same_line = never
 resharper_empty_block_style = together_same_line
-# Without these, Rider keeps same-line if and case bodies and joins multi-line initialisers,
-# which the build then rejects (checked with Rider 2026.2 against dotnet format, SDK 10.0.302).
-resharper_keep_existing_embedded_arrangement = false
-resharper_place_simple_case_statement_on_same_line = false
+# Without these, Rider joins multi-line initialisers, which the build rejects
+# (checked with Rider 2026.2 against dotnet format, SDK 10.0.302).
 resharper_keep_existing_initializer_arrangement = true
 resharper_place_simple_initializer_on_single_line = false
 resharper_trailing_comma_in_multiline_lists = true

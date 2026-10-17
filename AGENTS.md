@@ -69,13 +69,8 @@ gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property bel
 `.editorconfig` is the source of truth; the build fails on most of it. These rules cover what it cannot express.
 
 - **Indent with tabs.** `dotnet run scripts/check-indentation.cs` fails on a line that starts with a space; `dotnet format` does not catch it.
-- **Put braces on their own line (Allman), and one statement on each line.** Never join statements with `;` on one line: `Id = e.TaskId; State = TaskState.Running;` is wrong.
-- **Brace every body that spans more than one line.** A single-statement body goes on the next line, indented and unbraced; the build moves it there:
-
-  ```csharp
-  if (!exists)
-  	return NotFound(id);
-  ```
+- **Put braces on their own line (Allman), and one statement on each line.** Never join statements with `;` on one line: `Id = e.TaskId; State = TaskState.Running;` is wrong. The build does not catch this; Rider's reformat splits them.
+- **Brace every body that spans more than one line.** A single-statement `if` or `case` body may stay on its line, unbraced, when it reads as one thought: `if (!exists) return NotFound(id);`, `case Paused: return "gig resume";`. Otherwise put it on the next line, indented.
 - **Expression-bodied members only when they fit on one line.** Properties, accessors and one-line helpers use `=>`; constructors never do; a method with more than one statement uses a block.
 - **Write out every access modifier; never qualify with `this.`.**
 - **Use primary constructors for injected dependencies.**
