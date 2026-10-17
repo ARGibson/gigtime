@@ -82,6 +82,8 @@ dotnet_style_collection_initializer = true:suggestion
 dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
 dotnet_style_null_propagation = true:suggestion
 dotnet_style_coalesce_expression = true:suggestion
+dotnet_style_prefer_is_null_check_over_reference_equality_method = true:warning
+csharp_style_prefer_null_check_over_type_check = true:warning
 
 # Naming: private fields camelCase with no underscore; constants PascalCase.
 # Rules apply by specificity, so the const rule wins over the private-field rule.
@@ -99,6 +101,15 @@ dotnet_naming_symbols.constants.applicable_accessibilities = *
 dotnet_naming_symbols.constants.required_modifiers = const
 dotnet_naming_style.pascal.capitalization = pascal_case
 dotnet_diagnostic.IDE1006.severity = warning
+# Methods marked async end in Async (TAP naming). Test methods are exempt, below.
+dotnet_naming_rule.async_methods_end_in_async.symbols = async_methods
+dotnet_naming_rule.async_methods_end_in_async.style = end_in_async
+dotnet_naming_rule.async_methods_end_in_async.severity = warning
+dotnet_naming_symbols.async_methods.applicable_kinds = method
+dotnet_naming_symbols.async_methods.applicable_accessibilities = *
+dotnet_naming_symbols.async_methods.required_modifiers = async
+dotnet_naming_style.end_in_async.capitalization = pascal_case
+dotnet_naming_style.end_in_async.required_suffix = Async
 
 # Rider: braces only when the body spans lines; a single-statement body goes on the next line, unbraced.
 resharper_csharp_brace_style = next_line
@@ -132,9 +143,10 @@ resharper_csharp_align_multiline_expression = false
 resharper_csharp_align_multiline_extends_list = false
 resharper_csharp_align_linq_query = false
 
-# Test names are sentences with underscores.
+# Test names are sentences with underscores and carry no Async suffix.
 [tests/**.cs]
 dotnet_diagnostic.CA1707.severity = none
+dotnet_naming_rule.async_methods_end_in_async.severity = none
 
 # SDK 10.0.302's formatter rewrites the file-based app directive #:property to "# : property".
 [scripts/**.cs]

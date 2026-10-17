@@ -42,9 +42,14 @@ Examples:
 ### Layout and style
 
 - **Group by feature.** Keep an aggregate or decider, its events, its endpoints and its projections in one feature folder. Mirror that folder in the test project.
-- **Name each file after its main type.** Keep an aggregate's events together in `<Aggregate>Events.cs`. Small types that exist only to serve the main type (its enum, a value record, an interface and its one implementation) may share its file; give a type its own file once another feature uses it or it grows past about ten lines. Split a file by responsibility as it nears 300 lines; never split only to meet a line count.
+- **Give each type its own file, named after it, unless it belongs to a group below.** Split a file by responsibility as it nears 300 lines; never split only to meet a line count.
+- **Group small types in one file when they are read together.** A group holds at most one type with behaviour; the rest are records, enums or one-line interfaces. Three groups are allowed:
+  - *Family:* an aggregate's events in `<Aggregate>Events.cs`, or one endpoint's request and response records in `<Endpoint>Contracts.cs`.
+  - *Satellite:* a main type with the small records and enums that only it uses, declared below it, in `<MainType>.cs`. `TaskView.cs` may hold `TaskView`, `TaskState` and `Interval`.
+  - *Pair:* an interface and its one implementation, in the interface's file.
+- **Move a type into its own file** once code outside the feature uses it, or once it gains a member body longer than one line.
 - **Use file-scoped namespaces, `var`, records for events and DTOs, and collection expressions (`[]`).** Do not use `#region`.
-- **Name private fields in bare camelCase, without a leading underscore:** `private readonly ILogger<CatalogueStore> log;`. Name constants in PascalCase. Do not add an `Async` suffix unless a synchronous overload exists.
+- **Name private fields in bare camelCase, without a leading underscore:** `private readonly ILogger<CatalogueStore> log;`. Name constants in PascalCase. End every method that returns `Task` or `ValueTask` in `Async`, including Wolverine's `HandleAsync`, `LoadAsync` and `ValidateAsync`; test methods are exempt. The build enforces the suffix on methods marked `async`.
 - **Comment why, not what.** Put a type's intent in a `<summary>` only when its name does not make it obvious. When a line exists because of a bug or a decision, cite the issue: `// #12: report periods use the client's timezone.`
 - **Give every non-obvious package pin or build property a comment with its reason.**
 
@@ -66,6 +71,7 @@ Examples:
 - **Break long lines before they reach 140 columns.** Chains go one call per line with the dot leading; ternaries break before `?` and `:`; long parameter lists go one per line. Multi-line initialisers and collections end with a trailing comma.
 - **Order members:** fields and properties, constructors, public methods, then private helpers below their first caller.
 - **Prefer `switch` expressions for mapping a value; use a `switch` statement for side effects.**
+- **Check null with patterns:** `is null`, `is not null`, `is { } value`; never `== null` or `!= null`.
 - **With JetBrains Rider, or its MCP server, reformat and lint each changed file before committing** (`reformat_file`, then `lint_files`); Rider reads the same `.editorconfig`.
 
 ### Handlers and endpoints
