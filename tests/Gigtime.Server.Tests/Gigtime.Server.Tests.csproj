@@ -10,4 +10,13 @@
 		<PackageReference Include="Shouldly" />
 		<PackageReference Include="xunit.v3.mtp-v2" />
 	</ItemGroup>
+	<!-- #17: subprocesses run from the server output, never alongside test assemblies. -->
+	<Target Name="LocateServerOutput" BeforeTargets="GetAssemblyAttributes">
+		<MSBuild Projects="../../src/Gigtime.Server/Gigtime.Server.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+			<Output TaskParameter="TargetOutputs" ItemName="ServerOutput" />
+		</MSBuild>
+		<ItemGroup>
+			<AssemblyMetadata Include="GigtimeServerPath" Value="@(ServerOutput->'%(FullPath)')" />
+		</ItemGroup>
+	</Target>
 </Project>

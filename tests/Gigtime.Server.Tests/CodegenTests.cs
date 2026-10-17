@@ -19,7 +19,7 @@ public sealed class CodegenTests
 			WorkingDirectory = directory
 		};
 
-		start.ArgumentList.Add(typeof(Program).Assembly.Location);
+		start.ArgumentList.Add(ServerExecutable.Path);
 		start.ArgumentList.Add("codegen");
 		start.ArgumentList.Add("write");
 

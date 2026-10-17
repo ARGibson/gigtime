@@ -18,6 +18,23 @@ public sealed class PlatformPathsTests
 	}
 
 	[Fact]
+	public void Inspecting_paths_does_not_create_an_absent_runtime_fallback()
+	{
+		var root = Directory.CreateTempSubdirectory("gigtime-inspect-").FullName;
+
+		try
+		{
+			var paths = new LinuxPlatformPaths(null, null, null, root, root, false);
+			paths.RuntimeDirectory.ShouldBe(Path.Combine(root, $"gigtime-{Environment.UserName}"));
+			Directory.GetFileSystemEntries(root).ShouldBeEmpty();
+		}
+		finally
+		{
+			Directory.Delete(root, true);
+		}
+	}
+
+	[Fact]
 	public void Missing_runtime_fallback_is_created_private_and_reused()
 	{
 		if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Linux directory ownership test.");
@@ -87,7 +104,7 @@ public sealed class PlatformPathsTests
 				RedirectStandardError = true
 			};
 
-			start.ArgumentList.Add(typeof(Program).Assembly.Location);
+			start.ArgumentList.Add(ServerExecutable.Path);
 			start.Environment["TMPDIR"] = root;
 			start.Environment["XDG_DATA_HOME"] = Path.Combine(root, "data");
 			start.Environment["XDG_CONFIG_HOME"] = Path.Combine(root, "config");

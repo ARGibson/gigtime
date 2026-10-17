@@ -8,7 +8,7 @@ internal static partial class LinuxRuntimeDirectory
 	private const int NoFollow = 0x100;
 	private const int CurrentDirectory = -100;
 
-	internal static string Resolve(string? configured, string fallback)
+	internal static string Resolve(string? configured, string fallback, bool create = true)
 	{
 		if (configured is not null && Path.IsPathFullyQualified(configured)) return configured;
 
@@ -17,6 +17,8 @@ internal static partial class LinuxRuntimeDirectory
 		if (Statx(CurrentDirectory, fallback, NoFollow, RequiredFields, out var status) != 0)
 		{
 			if (Marshal.GetLastPInvokeError() != 2) throw Invalid(fallback);
+
+			if (!create) return fallback;
 
 			Directory.CreateDirectory(fallback, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 		}

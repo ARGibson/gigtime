@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<IsTestProject>true</IsTestProject>
+		<UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Shouldly" />
+		<PackageReference Include="xunit.v3.mtp-v2" />
+		<AssemblyMetadata Include="RepositoryRoot" Value="$(MSBuildProjectDirectory)/../.." />
+	</ItemGroup>
+</Project>

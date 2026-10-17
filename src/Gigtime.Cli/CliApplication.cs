@@ -4,9 +4,26 @@ using Gigtime.Platform;
 
 namespace Gigtime.Cli;
 
-public sealed class CliApplication(TextWriter output, TextWriter error, bool isTerminal, bool noColor, Func<IPlatformPaths> paths)
+public sealed class CliApplication(
+	TextWriter output,
+	TextWriter error,
+	bool isTerminal,
+	bool noColor,
+	Func<IPlatformPaths> paths,
+	Func<IPlatformPaths, IServiceInstaller> installers,
+	Func<string> executable)
 {
-	public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
+	public CliApplication(TextWriter output, TextWriter error, bool isTerminal, bool noColor, Func<IPlatformPaths> paths)
+		: this(output,
+			error,
+			isTerminal,
+			noColor,
+			paths,
+			p => new LinuxServiceInstaller(p),
+			() => File.ResolveLinkTarget("/proc/self/exe", true)!.FullName)
+	{ }
+
+	public RootCommand CreateCommand()
 	{
 		var root = new RootCommand("gig — time tracking over the gigtimed Unix socket");
 
@@ -22,6 +39,18 @@ public sealed class CliApplication(TextWriter output, TextWriter error, bool isT
 		TaskCommands.Configure(root, exchange);
 		CorrectionCommands.Configure(root, exchange);
 		ReportCommands.Configure(root, exchange);
+
+		SetupCommands.Configure(root, exchange, output, paths, installers, executable, json);
+		CompletionCommands.Configure(root, output, paths);
+
+		return root;
+	}
+
+	public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
+	{
+		var root = CreateCommand();
+		var json = (Option<bool>)root.Options.Single(o => o.Name == "--json");
+		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json);
 
 		var parsed = root.Parse(args,
 			new ParserConfiguration
