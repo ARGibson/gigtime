@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test commit checker
+        run: bash scripts/check-commits.test.sh
+
+      - name: Check pull request commits and branch
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/check-commits.sh "$PR_BASE_SHA" "$PR_HEAD_SHA" "$GITHUB_HEAD_REF"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json') }}
+
+      - name: Restore locked dependencies
+        run: dotnet restore --locked-mode
+
+      - name: Build
+        run: dotnet build -c Release -warnaserror --no-restore
+
+      - name: Verify format
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Check indentation
+        run: dotnet run scripts/check-indentation.cs
+
+      - name: Test
+        run: dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results
+          path: TestResults
+          if-no-files-found: ignore
+
+      - name: Check package age
+        run: dotnet run scripts/check-package-age.cs
+
+      - name: Check generated server code
+        if: hashFiles('src/Gigtime.Server/*.csproj') != ''
+        run: |
+          rm -rf src/Gigtime.Server/Internal/Generated
+          dotnet run --project src/Gigtime.Server -- codegen write
+          drift=$(git status --porcelain --untracked-files=all -- src/Gigtime.Server/Internal/Generated)
+          if [[ -n "$drift" ]]; then
+            printf '%s\n' "$drift"
+            exit 1
+          fi
+
+      - name: Publish native CLI
+        if: hashFiles('src/Gigtime.Cli/*.csproj') != ''
+        run: >-
+          dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true
+          -warnaserror -p:ILLinkTreatWarningsAsErrors=true -p:IlcTreatWarningsAsErrors=true -o artifacts/cli
+
+      - name: Upload native CLI
+        if: hashFiles('src/Gigtime.Cli/*.csproj') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gig-linux-x64
+          path: artifacts/cli/gig
+          if-no-files-found: error
