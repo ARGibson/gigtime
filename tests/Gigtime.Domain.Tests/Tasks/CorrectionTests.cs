@@ -17,17 +17,22 @@ public sealed class CorrectionTests
 		s.Send(new StopTask(TaskScenario.At.AddSeconds(60)));
 		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(999m)));
 		s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Currency: Change.Set("EUR")));
+
 		s.Task.RoundedSeconds.ShouldBe(60);
 		s.Task.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
 		TaskMath.Earnings(s.Task).ShouldBe(2m);
+
 		var overlap = s.Decide(new AmendInterval(1, End: TaskScenario.At.AddSeconds(41)));
+
 		overlap.Error!.Code.ShouldBe("validation");
 		overlap.Events.ShouldBeEmpty();
 		s.Decide(new AmendInterval(2, Start: TaskScenario.At.AddSeconds(19))).Error!.Code.ShouldBe("validation");
 		s.Decide(new AmendInterval(2, End: TaskScenario.At.AddSeconds(39))).Error!.Code.ShouldBe("validation");
 		s.Decide(new AmendInterval(3, End: TaskScenario.At.AddSeconds(100))).Error!.Code.ShouldBe("not_found");
+
 		s.Send(new AmendInterval(1, End: TaskScenario.At.AddSeconds(40)));
 		s.Send(new AmendInterval(2, End: TaskScenario.At.AddSeconds(100)));
+
 		s.Task.RawSeconds.ShouldBe(100);
 		s.Task.RoundedSeconds.ShouldBe(120);
 		TaskMath.Earnings(s.Task).ShouldBe(4m);
@@ -47,7 +52,9 @@ public sealed class CorrectionTests
 
 		result.IsSuccess.ShouldBeTrue();
 		result.Events.Count.ShouldBe(1);
+
 		recorded.Evolve(result.Events.Single());
+
 		recorded.State.ShouldBe(TaskState.Stopped);
 		recorded.RawSeconds.ShouldBe(3600);
 		recorded.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
@@ -72,6 +79,7 @@ public sealed class CorrectionTests
 	public void Invalid_timestamps_and_missing_projects_are_refused()
 	{
 		var s = new TaskScenario();
+
 		s.Decide(new StartTask("BAD", s.Catalogue.ProjectId, null, TaskScenario.At)).Error!.Code.ShouldBe("validation");
 		s.Decide(new StartTask("123abc", Guid.CreateVersion7(), null, TaskScenario.At)).Error!.Code.ShouldBe("not_found");
 
@@ -79,10 +87,13 @@ public sealed class CorrectionTests
 			.ShouldBe("validation");
 
 		s.Start();
+
 		s.Decide(new PauseTask(TaskScenario.At.AddSeconds(-1))).Error!.Code.ShouldBe("validation");
 		s.Decide(new StopTask(TaskScenario.At.AddSeconds(-1))).Error!.Code.ShouldBe("validation");
 		s.Decide(new AmendInterval(1, End: TaskScenario.At.AddSeconds(10))).Error!.Code.ShouldBe("validation");
+
 		s.Send(new PauseTask(TaskScenario.At.AddSeconds(10)));
+
 		s.Decide(new ResumeTask(TaskScenario.At.AddSeconds(9))).Error!.Code.ShouldBe("validation");
 		s.Decide(new StopTask(TaskScenario.At.AddSeconds(9))).Error!.Code.ShouldBe("validation");
 	}
@@ -96,10 +107,13 @@ public sealed class CorrectionTests
 		s.Catalogue.Send(new AddProject(project, s.Catalogue.ClientId, "other", Rate: 999m));
 		s.Send(new ReassignTask(project));
 		s.Send(new ChangeTaskRef(null));
+
 		s.Task.ProjectId.ShouldBe(project);
 		s.Task.Ref.ShouldBeNull();
 		s.Task.Snapshot!.Rate.ShouldBe(120m);
+
 		s.Send(new VoidTask());
+
 		s.Decide(new AmendInterval(1)).Error!.Code.ShouldBe("invalid_transition");
 		s.Decide(new ReassignTask(project)).Error!.Code.ShouldBe("invalid_transition");
 		s.Decide(new ChangeTaskRef("new-ref")).Error!.Code.ShouldBe("invalid_transition");
@@ -114,6 +128,7 @@ public sealed class CorrectionTests
 		var s = new TaskScenario();
 		s.Reach(state);
 		var result = s.Decide(new AmendInterval(1));
+
 		result.Error!.Code.ShouldBe("validation");
 		result.Error.Message.ShouldBe("Specify an interval start or end to amend.");
 		result.Events.ShouldBeEmpty();
@@ -130,6 +145,7 @@ public sealed class CorrectionTests
 		var snapshot = s.Task.Snapshot;
 		var start = TaskScenario.At.AddSeconds(-1);
 		s.Send(new AmendInterval(1, Start: start));
+
 		s.Task.Timeline.Single().Start.ShouldBe(start);
 		s.Task.StartedAt.ShouldBe(start);
 		s.Task.State.ShouldBe(state);
@@ -148,6 +164,7 @@ public sealed class CorrectionTests
 		s.Catalogue.Send(new AddProject(project, s.Catalogue.ClientId, "other", Rate: 999m));
 		var snapshot = s.Task.Snapshot;
 		s.Send(new ReassignTask(project));
+
 		s.Task.ProjectId.ShouldBe(project);
 		s.Task.State.ShouldBe(state);
 		s.Task.Snapshot.ShouldBe(snapshot);
@@ -162,8 +179,11 @@ public sealed class CorrectionTests
 		var s = new TaskScenario();
 		s.Reach(state);
 		s.Send(new ChangeTaskRef("new-ref"));
+
 		s.Task.Ref.ShouldBe("new-ref");
+
 		s.Send(new ChangeTaskRef(null));
+
 		s.Task.Ref.ShouldBeNull();
 		s.Task.State.ShouldBe(state);
 	}
@@ -189,10 +209,12 @@ public sealed class CorrectionTests
 
 		var end = TaskScenario.At.AddSeconds(120);
 		s.Send(new AmendInterval(s.Task.Timeline.Count, End: end));
+
 		s.Task.StoppedAt.ShouldBe(end);
 		s.Task.StoppedAt.ShouldBe(s.Task.Timeline[^1].End);
 		// #1: amending an earlier boundary still uses the final interval's endpoint.
 		s.Send(new AmendInterval(1, Start: TaskScenario.At.AddSeconds(-1)));
+
 		s.Task.StoppedAt.ShouldBe(end);
 	}
 

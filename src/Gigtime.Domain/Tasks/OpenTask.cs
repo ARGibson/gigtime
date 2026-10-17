@@ -13,8 +13,14 @@ public sealed class OpenTask
 	{
 		switch (e)
 		{
-			case OpenTaskSet x: Apply(x); break;
-			case OpenTaskCleared x: Apply(x); break;
+			case OpenTaskSet x:
+				Apply(x);
+
+				break;
+			case OpenTaskCleared x:
+				Apply(x);
+
+				break;
 			default: throw new ArgumentException("Not a tracker event.", nameof(e));
 		}
 	}

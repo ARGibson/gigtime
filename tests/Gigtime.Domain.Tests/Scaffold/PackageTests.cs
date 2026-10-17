@@ -11,6 +11,7 @@ public sealed class PackageTests
 	{
 		var assembly = typeof(IEvent).Assembly;
 		var projection = assembly.GetType("JasperFx.Events.Aggregation.JasperFxSingleStreamProjectionBase`4");
+
 		projection.ShouldNotBeNull();
 		projection.GetGenericArguments().Length.ShouldBe(4);
 	}

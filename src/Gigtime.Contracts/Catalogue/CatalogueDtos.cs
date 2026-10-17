@@ -1,7 +1,5 @@
 namespace Gigtime.Contracts.Catalogue;
 
-public sealed record EntityDto(Guid Id, string Key);
-
 public sealed record DefaultsDto(string Timezone, string WeekStarts, string Rounding);
 
 public sealed record ClientDto(Guid Id, string Key, string Name, string Currency, string Timezone, string Rounding, bool Archived);

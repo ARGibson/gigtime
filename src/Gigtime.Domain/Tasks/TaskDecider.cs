@@ -25,9 +25,9 @@ public static class TaskDecider
 			StopTask c when task.State is TaskState.Running or TaskState.Paused => Close(task, tracker, catalogue, c, c.At, true),
 			VoidTask c when task.State == TaskState.Stopped => Decision.Accept(new TaskVoided(c.Reason)),
 			AmendInterval c when task.State != TaskState.Voided => Amend(task, c),
-			ReassignTask c when task.State != TaskState.Voided => Reassign(task, catalogue, c),
+			ReassignTask c when task.State != TaskState.Voided => Reassign(catalogue, c),
 			ChangeTaskRef c when task.State != TaskState.Voided => Decision.Accept(new TaskRefChanged(c.Ref)),
-			_ => Transition(task, command)
+			_ => Transition(task, command),
 		};
 	}
 
@@ -97,7 +97,7 @@ public static class TaskDecider
 		return Decision.Accept(new TaskResumed(at));
 	}
 
-	private static Decision Reassign(TaskView task, CatalogueView catalogue, ReassignTask c)
+	private static Decision Reassign(CatalogueView catalogue, ReassignTask c)
 	{
 		if (ProjectRefusal(catalogue, c.ProjectId, c) is { } error) return error;
 
@@ -120,7 +120,7 @@ public static class TaskDecider
 		intervals[index] = old with
 		{
 			Start = c.Start is { } start ? TaskMath.Instant(start) : old.Start,
-			End = c.End is { } end ? TaskMath.Instant(end) : old.End
+			End = c.End is { } end ? TaskMath.Instant(end) : old.End,
 		};
 
 		for (var i = 0; i < intervals.Length; i++)
@@ -150,8 +150,10 @@ public static class TaskDecider
 
 	private static string State(TaskView task) => task.State.ToString().ToLowerInvariant();
 
-	private static Decision Invalid(TaskView task, TaskCommand c, string message) =>
-		Decision.Refuse("validation", message, State(task), c.Command);
+	private static Decision Invalid(TaskView task, TaskCommand c, string message)
+	{
+		return Decision.Refuse("validation", message, State(task), c.Command);
+	}
 
 	private static Decision Transition(TaskView task, TaskCommand c)
 	{
@@ -162,13 +164,13 @@ public static class TaskDecider
 			(TaskState.Stopped or TaskState.Voided, StartTask or RecordTask) => null,
 			(TaskState.Stopped, PauseTask or ResumeTask or StopTask) => "gig start",
 			(TaskState.Voided, _) => "gig start",
-			_ => null
+			_ => null,
 		};
 
 		var message = (task.State, c) switch
 		{
 			(TaskState.Running, ResumeTask) => $"Task {task.Id} is running; no resume is needed.",
-			_ => $"Task {task.Id} is {State(task)}; {c.Command} does not apply." + (hint is null ? "" : $" Use {hint}.")
+			_ => $"Task {task.Id} is {State(task)}; {c.Command} does not apply." + (hint is null ? "" : $" Use {hint}."),
 		};
 
 		return Decision.Refuse("invalid_transition", message, State(task), c.Command, hint);

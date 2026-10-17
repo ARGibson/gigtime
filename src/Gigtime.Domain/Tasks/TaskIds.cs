@@ -7,8 +7,10 @@ public static class TaskIds
 	public static bool IsValid(string? id) => id is { Length: 6 } && id.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 
 	/// <summary>The host checks existing streams and still uses optimistic concurrency when appending.</summary>
-	public static string Create(Func<string, bool> exists) =>
-		Create(exists, () => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(3)));
+	public static string Create(Func<string, bool> exists)
+	{
+		return Create(exists, () => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(3)));
+	}
 
 	public static string Create(Func<string, bool> exists, Func<string> nextCandidate)
 	{

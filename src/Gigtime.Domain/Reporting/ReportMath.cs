@@ -3,8 +3,6 @@ using Gigtime.Domain.Tasks;
 
 namespace Gigtime.Domain.Reporting;
 
-public sealed record ReportTotal(Guid ClientId, Guid ProjectId, string Currency, long RawSeconds, long RoundedSeconds, decimal? Earnings);
-
 /// <summary>Totals sum task-rounded figures and group by snapshot currency, even after a client currency changes.</summary>
 public static class ReportMath
 {
@@ -45,3 +43,5 @@ public static class ReportMath
 			.ToArray();
 	}
 }
+
+public sealed record ReportTotal(Guid ClientId, Guid ProjectId, string Currency, long RawSeconds, long RoundedSeconds, decimal? Earnings);

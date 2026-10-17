@@ -13,6 +13,7 @@ internal sealed class CatalogueScenario
 	public void Send(CatalogueCommand c)
 	{
 		var decision = CatalogueDecider.Decide(State, c);
+
 		decision.Error.ShouldBeNull();
 
 		foreach (var e in decision.Events)
@@ -25,6 +26,7 @@ internal sealed class CatalogueScenario
 	public void Refuse(CatalogueCommand c, string code = "validation")
 	{
 		var decision = CatalogueDecider.Decide(State, c);
+
 		decision.Error!.Code.ShouldBe(code);
 		decision.Events.ShouldBeEmpty();
 	}

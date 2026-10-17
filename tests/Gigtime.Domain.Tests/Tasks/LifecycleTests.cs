@@ -45,6 +45,7 @@ public sealed class LifecycleTests
 		};
 
 		var result = s.Decide(c);
+
 		result.IsSuccess.ShouldBe(valid);
 
 		if (!valid)
@@ -87,7 +88,9 @@ public sealed class LifecycleTests
 		var s = new TaskScenario();
 		s.Start();
 		s.Send(new PauseTask(TaskScenario.At.AddSeconds(20)));
+
 		s.Tracker.TaskId.ShouldBe(s.Task.Id);
+
 		var another = new TaskView();
 
 		var refusal = TaskDecider.Decide(another,
@@ -97,7 +100,9 @@ public sealed class LifecycleTests
 
 		refusal.Error!.Code.ShouldBe("invalid_transition");
 		refusal.Events.ShouldBeEmpty();
+
 		s.Send(new StopTask(TaskScenario.At.AddMinutes(1)));
+
 		s.Tracker.TaskId.ShouldBeNull();
 		s.Task.RawSeconds.ShouldBe(20);
 		s.Task.StoppedAt.ShouldBe(TaskScenario.At.AddMinutes(1));
@@ -115,10 +120,13 @@ public sealed class LifecycleTests
 	{
 		var s = new TaskScenario();
 		s.Start();
+
 		s.Task.RawSecondsAt(TaskScenario.At.AddSeconds(10)).ShouldBe(10);
+
 		s.Send(new PauseTask(TaskScenario.At.AddSeconds(20)));
 		s.Send(new ResumeTask(TaskScenario.At.AddMinutes(2)));
 		s.Send(new StopTask(TaskScenario.At.AddMinutes(2).AddSeconds(20)));
+
 		s.Task.Intervals.Select(x => x.Number).ShouldBe([1, 2]);
 		s.Task.RawSeconds.ShouldBe(40);
 		s.Task.RoundedSeconds.ShouldBe(60);
@@ -153,6 +161,7 @@ public sealed class LifecycleTests
 	public void Id_allocation_retries_collisions_and_enforces_six_lowercase_hex_digits()
 	{
 		var ids = new Queue<string>(["7f3a9c", "7f3a9c", "123abc"]);
+
 		TaskIds.Create(x => x == "7f3a9c", ids.Dequeue).ShouldBe("123abc");
 		TaskIds.IsValid(TaskIds.Create(_ => false)).ShouldBeTrue();
 		TaskIds.IsValid("ABCDEF").ShouldBeFalse();
@@ -174,6 +183,7 @@ public sealed class LifecycleTests
 		var tracker = new OpenTask();
 		foreach (var e in s.TaskEvents) task.Evolve(e);
 		foreach (var e in s.TrackerEvents) tracker.Evolve(e);
+
 		task.Id.ShouldBe(s.Task.Id);
 		task.ProjectId.ShouldBe(s.Task.ProjectId);
 		task.ClientId(s.Catalogue.State).ShouldBe(s.Catalogue.ClientId);

@@ -1,13 +1,5 @@
 namespace Gigtime.Domain.Catalogue;
 
-public sealed record Defaults(string Timezone, DayOfWeek WeekStarts = DayOfWeek.Monday, string Rounding = "nearest-minute");
-
-public sealed record Client(Guid Id, string Key, string Name, string Currency, string? Timezone, string? Rounding, bool Archived = false);
-
-public sealed record Project(Guid Id, Guid ClientId, string Key, string? Name, decimal? Rate, string? Rounding, bool Archived = false);
-
-public sealed record ResolvedSettings(string Timezone, DayOfWeek WeekStarts, string Rounding, decimal? Rate, string Currency);
-
 /// <summary>Self-aggregating singleton catalogue; the host registers the store-specific projection (#2).</summary>
 public sealed class CatalogueView
 {
@@ -34,9 +26,12 @@ public sealed class CatalogueView
 			client.Currency);
 	}
 
-	public void Apply(DefaultsChanged e) => Defaults = new(e.Timezone ?? Defaults.Timezone,
-		e.WeekStarts ?? Defaults.WeekStarts,
-		e.Rounding ?? Defaults.Rounding);
+	public void Apply(DefaultsChanged e)
+	{
+		Defaults = new(e.Timezone ?? Defaults.Timezone,
+			e.WeekStarts ?? Defaults.WeekStarts,
+			e.Rounding ?? Defaults.Rounding);
+	}
 
 	public void Apply(ClientAdded e) => Clients.Add(e.ClientId, new(e.ClientId, e.Key, e.Name, e.Currency, e.Timezone, e.Rounding));
 
@@ -50,7 +45,7 @@ public sealed class CatalogueView
 			Name = e.Name.Resolve(c.Name),
 			Currency = e.Currency.Resolve(c.Currency),
 			Timezone = e.Timezone.Resolve(c.Timezone),
-			Rounding = e.Rounding.Resolve(c.Rounding)
+			Rounding = e.Rounding.Resolve(c.Rounding),
 		};
 	}
 
@@ -58,14 +53,14 @@ public sealed class CatalogueView
 	{
 		Clients[e.ClientId] = Clients[e.ClientId] with
 		{
-			Archived = true
+			Archived = true,
 		};
 
 		foreach (var p in Projects.Values.Where(p => p.ClientId == e.ClientId).ToArray())
 		{
 			Projects[p.Id] = p with
 			{
-				Archived = true
+				Archived = true,
 			};
 		}
 	}
@@ -81,27 +76,57 @@ public sealed class CatalogueView
 			Key = e.Key.Resolve(p.Key),
 			Name = e.Name.Resolve(p.Name),
 			Rate = e.Rate.Resolve(p.Rate),
-			Rounding = e.Rounding.Resolve(p.Rounding)
+			Rounding = e.Rounding.Resolve(p.Rounding),
 		};
 	}
 
-	public void Apply(ProjectArchived e) => Projects[e.ProjectId] = Projects[e.ProjectId] with
+	public void Apply(ProjectArchived e)
 	{
-		Archived = true
-	};
+		Projects[e.ProjectId] = Projects[e.ProjectId] with
+		{
+			Archived = true,
+		};
+	}
 
 	public void Evolve(object e)
 	{
 		switch (e)
 		{
-			case DefaultsChanged x: Apply(x); break;
-			case ClientAdded x: Apply(x); break;
-			case ClientChanged x: Apply(x); break;
-			case ClientArchived x: Apply(x); break;
-			case ProjectAdded x: Apply(x); break;
-			case ProjectChanged x: Apply(x); break;
-			case ProjectArchived x: Apply(x); break;
+			case DefaultsChanged x:
+				Apply(x);
+
+				break;
+			case ClientAdded x:
+				Apply(x);
+
+				break;
+			case ClientChanged x:
+				Apply(x);
+
+				break;
+			case ClientArchived x:
+				Apply(x);
+
+				break;
+			case ProjectAdded x:
+				Apply(x);
+
+				break;
+			case ProjectChanged x:
+				Apply(x);
+
+				break;
+			case ProjectArchived x:
+				Apply(x);
+
+				break;
 			default: throw new ArgumentException("Not a catalogue event.", nameof(e));
 		}
 	}
 }
+
+public sealed record Defaults(string Timezone, DayOfWeek WeekStarts = DayOfWeek.Monday, string Rounding = "nearest-minute");
+
+public sealed record Client(Guid Id, string Key, string Name, string Currency, string? Timezone, string? Rounding, bool Archived = false);
+
+public sealed record Project(Guid Id, Guid ClientId, string Key, string? Name, decimal? Rate, string? Rounding, bool Archived = false);

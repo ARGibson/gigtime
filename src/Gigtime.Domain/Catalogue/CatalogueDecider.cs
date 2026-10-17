@@ -10,18 +10,18 @@ public static class CatalogueDecider
 
 		return command switch
 		{
-			SetDefaults c => Defaults(state, c),
+			SetDefaults c => Defaults(c),
 			AddClient c => Add(state, c),
 			ChangeClient c => Change(state, c),
 			ArchiveClient c => state.FindClient(c.ClientId) is null ? Missing(c) : Decision.Accept(new ClientArchived(c.ClientId)),
 			AddProject c => Add(state, c),
 			ChangeProject c => Change(state, c),
 			ArchiveProject c => state.FindProject(c.ProjectId) is null ? Missing(c) : Decision.Accept(new ProjectArchived(c.ProjectId)),
-			_ => Invalid(command, "Unknown catalogue command.")
+			_ => Invalid(command, "Unknown catalogue command."),
 		};
 	}
 
-	private static Decision Defaults(CatalogueView state, SetDefaults c)
+	private static Decision Defaults(SetDefaults c)
 	{
 		if (!CatalogueRules.ValidTimezone(c.Timezone)) return Invalid(c, "Unknown timezone.");
 		if (!CatalogueRules.ValidRounding(c.Rounding)) return Invalid(c, "Unsupported rounding; use nearest-minute.");
@@ -108,9 +108,12 @@ public static class CatalogueDecider
 
 	private static Decision Invalid(CatalogueCommand c, string message) => Decision.Refuse("validation", message, "catalogue", c.Command);
 
-	private static Decision Missing(CatalogueCommand c) => Decision.Refuse("not_found",
-		"The client or project does not exist.",
-		"catalogue",
-		c.Command,
-		"gig client list");
+	private static Decision Missing(CatalogueCommand c)
+	{
+		return Decision.Refuse("not_found",
+			"The client or project does not exist.",
+			"catalogue",
+			c.Command,
+			"gig client list");
+	}
 }

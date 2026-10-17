@@ -122,6 +122,7 @@ public sealed class CatalogueValidationTests
 		};
 
 		var result = CatalogueDecider.Decide(s.State, input);
+
 		result.Error!.Code.ShouldBe("validation");
 		result.Error.Message.ShouldStartWith(message);
 		result.Error.Command.ShouldBe(input.Command);

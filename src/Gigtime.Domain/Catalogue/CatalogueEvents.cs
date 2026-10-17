@@ -2,7 +2,13 @@ namespace Gigtime.Domain.Catalogue;
 
 public sealed record DefaultsChanged(string? Timezone = null, DayOfWeek? WeekStarts = null, string? Rounding = null);
 
-public sealed record ClientAdded(Guid ClientId, string Key, string Name, string Currency, string? Timezone = null, string? Rounding = null);
+public sealed record ClientAdded(
+	Guid ClientId,
+	string Key,
+	string Name,
+	string Currency,
+	string? Timezone = null,
+	string? Rounding = null);
 
 public sealed record ClientChanged(
 	Guid ClientId,

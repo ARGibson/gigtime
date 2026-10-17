@@ -2,15 +2,6 @@ using Gigtime.Domain.Catalogue;
 
 namespace Gigtime.Domain.Tasks;
 
-public enum TaskState { Missing, Running, Paused, Stopped, Voided }
-
-public sealed record Interval(int Number, DateTimeOffset Start, DateTimeOffset? End)
-{
-	public long Seconds => End is { } end ? (end - Start).Ticks / TimeSpan.TicksPerSecond : 0;
-}
-
-public sealed record PolicySnapshot(string Rounding, decimal? Rate, string Currency);
-
 /// <summary>Self-aggregating task document. Zero-length spans retain their event numbers but leave the visible intervals.</summary>
 public sealed class TaskView
 {
@@ -26,9 +17,12 @@ public sealed class TaskView
 	public long RawSeconds => Timeline.Sum(i => i.Seconds);
 	public long RoundedSeconds => Snapshot is null ? RawSeconds : TaskMath.Round(RawSeconds, Snapshot.Rounding);
 
-	public long RawSecondsAt(DateTimeOffset now) => RawSeconds + (State == TaskState.Running
-		? Math.Max(0, (TaskMath.Instant(now) - Timeline[^1].Start).Ticks / TimeSpan.TicksPerSecond)
-		: 0);
+	public long RawSecondsAt(DateTimeOffset now)
+	{
+		return RawSeconds + (State == TaskState.Running
+			? Math.Max(0, (TaskMath.Instant(now) - Timeline[^1].Start).Ticks / TimeSpan.TicksPerSecond)
+			: 0);
+	}
 
 	public Guid ClientId(CatalogueView catalogue) => catalogue.Projects[ProjectId].ClientId;
 
@@ -39,6 +33,7 @@ public sealed class TaskView
 		Ref = e.Ref;
 		State = TaskState.Running;
 		StartedAt = e.At;
+
 		Timeline.Add(new(1, e.At, null));
 	}
 
@@ -71,6 +66,7 @@ public sealed class TaskView
 		StartedAt = e.Start;
 		StoppedAt = e.End;
 		Snapshot = new(e.Rounding, e.Rate, e.Currency);
+
 		Timeline.Add(new(1, e.Start, e.End));
 	}
 
@@ -82,7 +78,7 @@ public sealed class TaskView
 		Timeline[index] = old with
 		{
 			Start = e.Start ?? old.Start,
-			End = e.End ?? old.End
+			End = e.End ?? old.End,
 		};
 
 		StartedAt = Timeline[0].Start;
@@ -93,25 +89,57 @@ public sealed class TaskView
 	public void Apply(TaskRefChanged e) => Ref = e.Ref;
 	public void Apply(TaskVoided _) => State = TaskState.Voided;
 
-	private void Close(DateTimeOffset at) => Timeline[^1] = Timeline[^1] with
-	{
-		End = at
-	};
-
 	public void Evolve(object e)
 	{
 		switch (e)
 		{
-			case TaskStarted x: Apply(x); break;
-			case TaskPaused x: Apply(x); break;
-			case TaskResumed x: Apply(x); break;
-			case TaskStopped x: Apply(x); break;
-			case TaskRecorded x: Apply(x); break;
-			case IntervalAmended x: Apply(x); break;
-			case TaskReassigned x: Apply(x); break;
-			case TaskRefChanged x: Apply(x); break;
-			case TaskVoided x: Apply(x); break;
+			case TaskStarted x:
+				Apply(x);
+
+				break;
+			case TaskPaused x:
+				Apply(x);
+
+				break;
+			case TaskResumed x:
+				Apply(x);
+
+				break;
+			case TaskStopped x:
+				Apply(x);
+
+				break;
+			case TaskRecorded x:
+				Apply(x);
+
+				break;
+			case IntervalAmended x:
+				Apply(x);
+
+				break;
+			case TaskReassigned x:
+				Apply(x);
+
+				break;
+			case TaskRefChanged x:
+				Apply(x);
+
+				break;
+			case TaskVoided x:
+				Apply(x);
+
+				break;
 			default: throw new ArgumentException("Not a task event.", nameof(e));
 		}
 	}
+
+	private void Close(DateTimeOffset at)
+	{
+		Timeline[^1] = Timeline[^1] with
+		{
+			End = at,
+		};
+	}
 }
+
+public sealed record PolicySnapshot(string Rounding, decimal? Rate, string Currency);

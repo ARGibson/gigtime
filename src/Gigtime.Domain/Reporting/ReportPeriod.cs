@@ -2,16 +2,6 @@ using Gigtime.Domain.Catalogue;
 
 namespace Gigtime.Domain.Reporting;
 
-public enum PeriodKind { Week, Month, Range }
-
-public sealed record ReportQuery(
-	DateTimeOffset At,
-	PeriodKind Kind = PeriodKind.Week,
-	DateOnly? From = null,
-	DateOnly? UntilExclusive = null,
-	Guid? ClientId = null,
-	Guid? ProjectId = null);
-
 /// <summary>Local calendar dates avoid assuming every day lasts 24 hours across DST.</summary>
 public sealed record ReportPeriod(DateOnly From, DateOnly UntilExclusive)
 {
@@ -33,7 +23,7 @@ public sealed record ReportPeriod(DateOnly From, DateOnly UntilExclusive)
 			PeriodKind.Week => Week(local, settings.WeekStarts),
 			PeriodKind.Month => new(new(local.Year, local.Month, 1), new DateOnly(local.Year, local.Month, 1).AddMonths(1)),
 			PeriodKind.Range when query.From is { } from && query.UntilExclusive is { } until && until > from => new(from, until),
-			_ => throw new ArgumentException("Supply an ordered local date range or a supported period.", nameof(query))
+			_ => throw new ArgumentException("Supply an ordered local date range or a supported period.", nameof(query)),
 		};
 	}
 

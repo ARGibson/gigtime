@@ -25,7 +25,3 @@ public sealed record TaskReassigned(Guid ProjectId);
 public sealed record TaskRefChanged(string? Ref);
 
 public sealed record TaskVoided(string? Reason = null);
-
-public sealed record OpenTaskSet(string TaskId);
-
-public sealed record OpenTaskCleared;

@@ -28,6 +28,7 @@ internal sealed class TaskScenario
 	public void Send(TaskCommand command)
 	{
 		var d = Decide(command);
+
 		d.Error.ShouldBeNull();
 
 		foreach (var e in d.Events)
