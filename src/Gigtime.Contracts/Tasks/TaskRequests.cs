@@ -2,15 +2,16 @@ namespace Gigtime.Contracts.Tasks;
 
 public sealed record StartTaskRequest(string Client, string Project, string? Ref = null);
 
-public sealed record RecordTaskRequest(string Client, string Project, DateTimeOffset Start, DateTimeOffset End, string? Ref = null);
+public sealed record VoidTaskRequest(string? Reason = null);
 
-public sealed record AmendTaskRequest(
+// #4: local wire times are resolved only after the service loads the client's timezone.
+public sealed record RecordTaskInput(string Client, string Project, string Start, string End, string? Ref = null);
+
+public sealed record AmendTaskInput(
 	int? Interval = null,
-	DateTimeOffset? Start = null,
-	DateTimeOffset? End = null,
+	string? Start = null,
+	string? End = null,
 	string? Client = null,
 	string? Project = null,
 	string? Ref = null,
 	bool ClearRef = false);
-
-public sealed record VoidTaskRequest(string? Reason = null);

@@ -20,6 +20,8 @@ public sealed class CliApplication(TextWriter output, TextWriter error, bool isT
 		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json);
 		CatalogueCommands.Configure(root, exchange);
 		TaskCommands.Configure(root, exchange);
+		CorrectionCommands.Configure(root, exchange);
+		ReportCommands.Configure(root, exchange);
 
 		var parsed = root.Parse(args,
 			new ParserConfiguration

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Gigtime.Contracts;
 using Gigtime.Contracts.Catalogue;
+using Gigtime.Contracts.Reporting;
 using Gigtime.Contracts.Tasks;
 
 namespace Gigtime.Cli.Tests;
@@ -11,7 +12,8 @@ internal static class CommandCases
 	internal static readonly string[] Names =
 	[
 		"defaults show", "defaults set", "client add", "client set", "client list", "client archive",
-		"project add", "project set", "project list", "project archive", "start", "pause", "resume", "stop", "status", "log", "show",
+		"project add", "project set", "project list", "project archive", "start", "pause", "resume", "stop", "status", "log", "show", "amend",
+		"add", "void", "report",
 	];
 
 	internal static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture);
@@ -35,6 +37,15 @@ internal static class CommandCases
 	{
 		return name switch
 		{
+			"amend" =>
+			[
+				"amend", "01JTASK", "--interval", "1", "--start", "2026-03-02T09:00Z", "--end", "10:00", "--client", "example", "--project", "work",
+				"--ref", "corrected"
+			],
+			"add" => ["add", "example", "work", "--from", "2026-03-02T09:00", "--to", "10:00", "--ref", "backfill"],
+			"void" => ["void", "01JTASK", "--reason", "mistake"],
+			"report" => ["report", "--range", "2026-03-01..2026-03-31", "--client", "example", "--project", "work"],
+
 			"defaults show" => ["defaults", "show"],
 			"defaults set" => ["defaults", "set", "--timezone", "Europe/London", "--week-starts", "Monday", "--rounding", "up:15"],
 			"client add" =>
@@ -61,6 +72,11 @@ internal static class CommandCases
 	{
 		return name switch
 		{
+			"amend" => ("POST", "/v1/tasks/01JTASK/amend"),
+			"add" => ("POST", "/v1/tasks/add"),
+			"void" => ("POST", "/v1/tasks/01JTASK/void"),
+			"report" => ("GET", "/v1/report?range=2026-03-01..2026-03-31&client=example&project=work"),
+
 			"defaults show" => ("GET", "/v1/defaults"),
 			"defaults set" => ("POST", "/v1/defaults"),
 			"client add" => ("POST", "/v1/clients"),
@@ -83,6 +99,12 @@ internal static class CommandCases
 	{
 		return name switch
 		{
+			"amend" => JsonSerializer.Serialize(new AmendTaskInput(1, "2026-03-02T09:00Z", "10:00", "example", "work", "corrected"),
+				GigtimeJsonContext.Default.AmendTaskInput),
+			"add" => JsonSerializer.Serialize(new RecordTaskInput("example", "work", "2026-03-02T09:00", "10:00", "backfill"),
+				GigtimeJsonContext.Default.RecordTaskInput),
+			"void" => JsonSerializer.Serialize(new VoidTaskRequest("mistake"), GigtimeJsonContext.Default.VoidTaskRequest),
+
 			"defaults set" => JsonSerializer.Serialize(new SetDefaultsRequest("Europe/London", "Monday", "up:15"),
 				GigtimeJsonContext.Default.SetDefaultsRequest),
 			"client add" => JsonSerializer.Serialize(new AddClientRequest("example", "Example [blue]", "GBP", "Europe/London", "up:15"),
@@ -106,6 +128,12 @@ internal static class CommandCases
 
 		return name switch
 		{
+			"report" => JsonSerializer.Serialize(Envelopes.Success(name,
+					new ReportDto(
+						[new(new(ClientId, "example"), new(ProjectId, "work"), "GBP", 3661, 4500, "01:15:00", new("GBP", "12.50", "12.50"))],
+						[new(new(ClientId, "example"), "GBP", 3661, 4500, "01:15:00", new("GBP", "12.50", "12.50"))])),
+				GigtimeJsonContext.Default.ReportResponse),
+
 			"defaults show" or "defaults set" => JsonSerializer.Serialize(
 				Envelopes.Success(name, new DefaultsDto("Europe/London", "Monday", "up:15")),
 				GigtimeJsonContext.Default.DefaultsResponse),
@@ -128,6 +156,7 @@ internal static class CommandCases
 	{
 		return name switch
 		{
+			"report" => "12.50",
 			"defaults show" or "defaults set" => "Europe/London",
 			"client add" or "client set" or "client list" => "Example [blue]",
 			"project add" or "project set" or "project list" => "25.00 GBP",

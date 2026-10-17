@@ -12,7 +12,17 @@ internal sealed class FakeServer(WebApplication application, string directory, I
 	internal IPlatformPaths Paths { get; } = paths;
 	internal ConcurrentQueue<ReceivedRequest> Requests { get; } = new();
 
-	internal static async Task<FakeServer> StartAsync(string body, int status = 200)
+	internal static Task<FakeServer> StartAsync(string body, int status = 200)
+	{
+		return StartAsync(async context =>
+		{
+			context.Response.StatusCode = status;
+			context.Response.ContentType = "application/json";
+			await context.Response.WriteAsync(body, context.RequestAborted);
+		});
+	}
+
+	internal static async Task<FakeServer> StartAsync(Func<HttpContext, Task> respond)
 	{
 		var directory = Path.Combine(Path.GetTempPath(), "gig-cli-" + Guid.NewGuid().ToString("N"));
 		var paths = new FakePaths(Path.Combine(directory, "data"), directory, Path.Combine(directory, "config"));
@@ -38,9 +48,7 @@ internal sealed class FakeServer(WebApplication application, string directory, I
 				context.Request.Path + context.Request.QueryString,
 				await reader.ReadToEndAsync(context.RequestAborted)));
 
-			context.Response.StatusCode = status;
-			context.Response.ContentType = "application/json";
-			await context.Response.WriteAsync(body, context.RequestAborted);
+			await respond(context);
 		});
 
 		await application.StartAsync();

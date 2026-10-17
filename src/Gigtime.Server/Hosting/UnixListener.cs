@@ -8,14 +8,14 @@ public static class UnixListener
 {
 	public static void ListenOnGigtimeSocket(this WebApplicationBuilder builder)
 	{
+		builder.Services.AddHostedService<SocketDirectory>();
+
 		builder.WebHost.ConfigureKestrel((_, options) =>
 		{
 			if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("gigtimed requires Unix sockets.");
 
 			var paths = options.ApplicationServices.GetRequiredService<IPlatformPaths>();
 			var directory = Path.Combine(paths.RuntimeDirectory, "gigtime");
-			Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-			File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 			var path = Path.Combine(directory, "gigtimed.sock");
 			// #2: environment/configured TCP endpoints cannot widen the daemon's Unix-only listener.
 			options.Configure(new ConfigurationBuilder().Build());
