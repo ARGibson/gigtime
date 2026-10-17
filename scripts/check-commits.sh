@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+supports_utf8_locale() {
+	local output
+	output=$(LC_ALL=$1 bash -c '[[ ${#1} == 1 ]]' -- $'\xe2\x80\x94' 2>&1) && [[ -z $output ]]
+}
+
+if supports_utf8_locale C.UTF-8; then
+	export LC_ALL=C.UTF-8
+elif supports_utf8_locale C.utf8; then
+	export LC_ALL=C.utf8
+else
+	printf 'A C.UTF-8 or C.utf8 locale is required to count subject characters.\n' >&2
+	exit 2
+fi
+
 if [[ $# == 3 ]]; then
 	base=$1
 	head=$2
@@ -19,7 +33,7 @@ head_sha=$(git rev-parse --verify --end-of-options "${head}^{commit}")
 types='feat|fix|docs|test|refactor|perf|build|ci|chore|style|revert|deps'
 scopes='domain|contracts|platform|server|cli|tests|repo'
 branch_pattern="^($types)/[1-9][0-9]*-[a-z0-9]+(-[a-z0-9]+)*$"
-subject_pattern="^($types)(\(($scopes)\))?(!)?: ([a-z].*)$"
+subject_pattern="^($types)(\(($scopes)\))?(!)?: ([^[:upper:][:space:]].*)$"
 failures=0
 
 fail() {
@@ -32,14 +46,19 @@ if [[ ! $branch =~ $branch_pattern ]]; then
 fi
 
 while IFS= read -r commit; do
-	message=$(git show -s --format=%B "$commit")
+	raw_message=$(git show -s --format=%B "$commit")
+	message=$(
+		while IFS= read -r line; do
+			printf '%s\n' "${line%$'\r'}"
+		done <<< "$raw_message"
+	)
 	subject=${message%%$'\n'*}
 	breaking=false
 
 	if [[ $subject =~ $subject_pattern ]]; then
 		[[ ${BASH_REMATCH[4]} != '!' ]] || breaking=true
 	else
-		fail "$commit" 'subject must have an allowed type, optional scope/!, and a lowercase description'
+		fail "$commit" 'subject must have an allowed type, optional scope/!, and a nonempty description without an uppercase first letter'
 	fi
 
 	if (( ${#subject} > 72 )); then
@@ -61,7 +80,7 @@ while IFS= read -r commit; do
 	done <<< "$footer"
 
 	if [[ $refs != true ]]; then
-		fail "$commit" 'final footer paragraph must contain Refs #<issue>'
+		fail "$commit" 'final paragraph must contain Refs #<issue> (keep trailers such as Co-Authored-By in the same paragraph)'
 	fi
 
 	if [[ $breaking != "$breaking_footer" ]]; then
