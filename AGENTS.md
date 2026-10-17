@@ -39,6 +39,16 @@ Examples:
 
 ## Code
 
+### Design
+
+gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property below names the check that makes it concrete; the sections after this one hold the detail. Reviewers judge every change against all five.
+
+- **Composable — plays well with others.** Keep public surfaces small and intention-revealing: expose what a caller needs, nothing more. Take dependencies as parameters. Add no interface, base class or `*Service` before a second real use exists (see Dependencies).
+- **Unix philosophy — does one thing well.** One endpoint per class, one responsibility per type, one reason to change per file. If a type's name needs "And" or a summary needs two sentences, split it.
+- **Predictable — does what you expect.** Deciders and `Handle` methods are pure: same inputs, same result, no hidden I/O. Instants arrive as parameters. A method's name states every effect it has; a getter never writes, and a `Validate` never appends. Refusals are values, not exceptions.
+- **Idiomatic — feels natural.** Write current C# and follow `.editorconfig`, Formatting and the Wolverine shapes below. When the language or a library has an established way, use it rather than a home-grown one.
+- **Domain-based — models the problem in language and structure.** Name types, members and folders in the time-tracking domain: task, interval, client, project, rate, report. Never `Manager`, `Helper`, `Utils`, `Processor` or `Data`. Folders are features, not layers (`Tasks/`, not `Services/`).
+
 ### Layout and style
 
 - **Group by feature.** Keep an aggregate or decider, its events, its endpoints and its projections in one feature folder. Mirror that folder in the test project.
