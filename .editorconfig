@@ -138,7 +138,7 @@ resharper_blank_lines_after_multiline_statements = 1
 resharper_blank_lines_before_control_transfer_statements = 1
 resharper_blank_lines_after_control_transfer_statements = 1
 # Initialisers: one member per line, always. Rider otherwise packs members onto one line
-# inside a multi-line initialiser, which the build rejects (Rider 2026.2, SDK 10.0.302).
+# inside a multi-line initialiser, which the build rejects (Rider 2026.2, checked on SDK 10.0.302).
 resharper_keep_existing_initializer_arrangement = false
 resharper_place_simple_initializer_on_single_line = true
 resharper_wrap_object_and_collection_initializer_style = chop_always
@@ -168,7 +168,7 @@ resharper_csharp_align_linq_query = false
 dotnet_diagnostic.CA1707.severity = none
 dotnet_naming_rule.async_methods_end_in_async.severity = none
 
-# SDK 10.0.302's formatter rewrites the file-based app directive #:property to "# : property".
+# The SDK formatter (seen on 10.0.302) rewrites the file-based app directive #:property to "# : property".
 [scripts/**.cs]
 dotnet_diagnostic.IDE0055.severity = none
 
