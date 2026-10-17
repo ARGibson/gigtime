@@ -126,7 +126,3 @@ public sealed class CatalogueView
 }
 
 public sealed record Defaults(string Timezone, DayOfWeek WeekStarts = DayOfWeek.Monday, string Rounding = "nearest-minute");
-
-public sealed record Client(Guid Id, string Key, string Name, string Currency, string? Timezone, string? Rounding, bool Archived = false);
-
-public sealed record Project(Guid Id, Guid ClientId, string Key, string? Name, decimal? Rate, string? Rounding, bool Archived = false);
