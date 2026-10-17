@@ -75,6 +75,7 @@ public sealed class LifecycleTests
 	[Theory]
 	[InlineData("last=bad", "validation", 422)]
 	[InlineData("last=0", "validation", 422)]
+	[InlineData("last=-1", "validation", 422)]
 	[InlineData("all=bad", "validation", 422)]
 	[InlineData("client=absent", "not_found", 404)]
 	[InlineData("project=absent", "not_found", 404)]
@@ -106,5 +107,36 @@ public sealed class LifecycleTests
 		recent.Data!.Tasks.Select(t => t.Id).ShouldBe(ids.AsEnumerable().Reverse().Take(10));
 		var filtered = (await app.GetAsync<TasksDto>("/v1/tasks?client=example&project=project&last=2")).Data!.Tasks;
 		filtered.Select(t => t.Id).ShouldBe([ids[10], ids[8]]);
+	}
+
+	[Fact]
+	public async Task Client_and_project_query_parameters_bind_independently()
+	{
+		await using var app = await ServiceHost.StartAsync();
+		await app.CreateProjectAsync();
+		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("second", "Second", "GBP"));
+		await app.PostAsync<ProjectDto>("/v1/clients/second/projects", new AddProjectRequest("project"));
+		await app.PostAsync<ProjectDto>("/v1/clients/second/projects", new AddProjectRequest("other"));
+		var ids = new List<string>();
+
+		foreach (var (client, project) in new[] { ("example", "project"), ("second", "project"), ("second", "other") })
+		{
+			ids.Add((await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest(client, project))).Data!.Id);
+			app.Clock.Now = app.Clock.Now.AddSeconds(10);
+			await app.PostAsync<TaskDto>("/v1/tasks/stop");
+			app.Clock.Now = app.Clock.Now.AddSeconds(1);
+		}
+
+		(await app.GetAsync<TasksDto>("/v1/tasks?client=example&project=project&last=1&all=true"))
+			.Data!
+			.Tasks.ShouldHaveSingleItem()
+			.Id.ShouldBe(ids[0]);
+
+		(await app.GetAsync<TasksDto>("/v1/tasks?client=second&project=project&last=1"))
+			.Data!
+			.Tasks.ShouldHaveSingleItem()
+			.Id.ShouldBe(ids[1]);
+
+		(await app.GetAsync<TasksDto>("/v1/tasks?client=example&project=other", 404)).Error!.Code.ShouldBe("not_found");
 	}
 }

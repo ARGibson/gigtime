@@ -34,8 +34,35 @@ namespace Internal.Generated.WolverineHandlers
             JasperFx.Events.Documents.IDocumentReadOperations documentReadOperations = documentSession;
             System.Diagnostics.Activity.Current?.SetTag("handler.type", "Gigtime.Server.Tasks.ListTasksEndpoint");
             var dateTimeOffset = _timeProvider.GetUtcNow();
-            var loadedTaskList = await Gigtime.Server.Tasks.ListTasksEndpoint.LoadAsync(documentReadOperations, httpContext, httpContext.RequestAborted).ConfigureAwait(false);
-            var result1 = Gigtime.Server.Tasks.ListTasksEndpoint.Validate(loadedTaskList);
+            string last_rawValue = httpContext.Request.Query["last"];
+            System.Nullable<int> last = default;
+
+            if (last_rawValue != null && int.TryParse(last_rawValue, System.Globalization.CultureInfo.InvariantCulture, out var last_parsed))
+            {
+                last = last_parsed;
+            }
+            else if (!string.IsNullOrEmpty(last_rawValue))
+            {
+                await WriteQueryValueParsingProblem(httpContext, "last", last_rawValue, "int").ConfigureAwait(false);
+                return;
+            }
+
+            string all_rawValue = httpContext.Request.Query["all"];
+            bool all = default;
+
+            if (bool.TryParse(all_rawValue, out all))
+            {
+            }
+            else if (!string.IsNullOrEmpty(all_rawValue))
+            {
+                await WriteQueryValueParsingProblem(httpContext, "all", all_rawValue, "bool").ConfigureAwait(false);
+                return;
+            }
+
+            var client = httpContext.Request.Query["client"];
+            var project = httpContext.Request.Query["project"];
+            var loadedTaskList = await Gigtime.Server.Tasks.ListTasksEndpoint.LoadAsync(documentReadOperations, httpContext.RequestAborted, all, client, project).ConfigureAwait(false);
+            var result1 = Gigtime.Server.Tasks.ListTasksEndpoint.Validate(loadedTaskList, last, client, project);
             // Evaluate whether or not the execution should be stopped based on the IResult value
             if (result1 != null && !(result1 is Wolverine.Http.WolverineContinue))
             {
@@ -45,7 +72,7 @@ namespace Internal.Generated.WolverineHandlers
 
             
             // The actual HTTP request handler execution
-            var envelopeOfTasksDto_response = Gigtime.Server.Tasks.ListTasksEndpoint.Handle(loadedTaskList, dateTimeOffset);
+            var envelopeOfTasksDto_response = Gigtime.Server.Tasks.ListTasksEndpoint.Handle(loadedTaskList, dateTimeOffset, last, all, client, project);
 
             // Writing the response body to JSON because this was the first 'return variable' in the method signature
             await WriteJsonAsync(httpContext, envelopeOfTasksDto_response, 404);
