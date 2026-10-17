@@ -12,7 +12,7 @@
 		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj" />
 	</ItemGroup>
 	<ItemGroup>
-	  <PackageReference Include="Spectre.Console" />
-	  <PackageReference Include="System.CommandLine" />
+		<PackageReference Include="Spectre.Console" />
+		<PackageReference Include="System.CommandLine" />
 	</ItemGroup>
 </Project>
