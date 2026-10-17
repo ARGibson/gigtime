@@ -15,6 +15,7 @@ public sealed class CatalogueTests
   [InlineData("-acme", false)]
   [InlineData("acme_1", false)]
   [InlineData("acme\n", false)]
+  [InlineData("abcdefghijklmnopqrstuvwxyz123456", true)]
   [InlineData("abcdefghijklmnopqrstuvwxyz1234567", false)]
   public void Client_keys_follow_the_public_grammar(string key, bool valid)
   {
@@ -98,7 +99,7 @@ public sealed class CatalogueTests
   }
 
   [Fact]
-  public void Replay_matches_the_incremental_catalogue_document()
+  public void Evolve_is_deterministic_for_catalogue_events()
   {
 	var s = new CatalogueScenario();
 	s.Send(new SetDefaults("UTC"));

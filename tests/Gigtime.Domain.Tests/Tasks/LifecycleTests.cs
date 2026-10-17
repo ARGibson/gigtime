@@ -47,6 +47,23 @@ public sealed class LifecycleTests
 	  result.Error!.Code.ShouldBe(state == TaskState.Missing ? "not_found" : "invalid_transition");
 	  result.Error.State.ShouldBe(state.ToString().ToLowerInvariant());
 	  result.Error.Command.ShouldBe(command);
+	  var expectedHint = (state, command) switch
+	  {
+		(TaskState.Missing, _) => "gig start",
+		(TaskState.Running or TaskState.Paused, "void" or "start" or "add") => "gig stop",
+		(TaskState.Paused, "pause") => "gig resume",
+		(TaskState.Stopped or TaskState.Voided, _) => "gig start",
+		_ => null
+	  };
+	  result.Error.Hint.ShouldBe(expectedHint);
+	  var expectedMessage = state switch
+	  {
+		TaskState.Missing => "No task exists for this command.",
+		TaskState.Running when command == "resume" => $"Task {s.Task.Id} is running; no resume is needed.",
+		_ => $"Task {s.Task.Id} is {state.ToString().ToLowerInvariant()}; {command} does not apply." +
+		  (expectedHint is null ? "" : $" Use {expectedHint}.")
+	  };
+	  result.Error.Message.ShouldBe(expectedMessage);
 	}
   }
 
@@ -114,7 +131,7 @@ public sealed class LifecycleTests
   }
 
   [Fact]
-  public void Replay_matches_both_task_and_tracker_documents()
+  public void Evolve_is_deterministic_for_task_and_tracker_events()
   {
 	var s = new TaskScenario(); s.Start();
 	s.Send(new PauseTask(TaskScenario.At.AddSeconds(10)));

@@ -101,6 +101,28 @@ public sealed class JsonContractTests
 	backfill.Start.Hour.ShouldBe(9);
   }
 
+  [Theory]
+  [InlineData("2026-03-02T09:00:00Z")]
+  [InlineData("2026-03-02T10:00:00+01:00")]
+  [InlineData("2026-03-02T04:00:00-05:00")]
+  public void Wire_instants_with_explicit_offsets_are_normalized_to_utc(string instant)
+  {
+	var json = "{\"client\":\"acme\",\"project\":\"site-audit\",\"start\":\"" + instant + "\",\"end\":\"" + instant + "\"}";
+	var request = JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.RecordTaskRequest)!;
+	request.Start.Offset.ShouldBe(TimeSpan.Zero);
+	request.Start.ShouldBe(DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture));
+  }
+
+  [Theory]
+  [InlineData("2026-03-02T09:00:00")]
+  [InlineData("2026-03-02T09:00:00.123")]
+  [InlineData("2026-03-02")]
+  public void Wire_instants_without_an_offset_are_rejected(string instant)
+  {
+	var json = "{\"client\":\"acme\",\"project\":\"site-audit\",\"start\":\"" + instant + "\",\"end\":\"2026-03-02T10:00:00Z\"}";
+	Should.Throw<JsonException>(() => JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.RecordTaskRequest));
+  }
+
   [Fact]
   public void Duration_display_keeps_total_hours_instead_of_wrapping_at_a_day()
   {

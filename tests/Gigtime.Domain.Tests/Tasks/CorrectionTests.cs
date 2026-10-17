@@ -24,7 +24,7 @@ public sealed class CorrectionTests
 	overlap.Events.ShouldBeEmpty();
 	s.Decide(new AmendInterval(2, Start: TaskScenario.At.AddSeconds(19))).Error!.Code.ShouldBe("validation");
 	s.Decide(new AmendInterval(2, End: TaskScenario.At.AddSeconds(39))).Error!.Code.ShouldBe("validation");
-	s.Decide(new AmendInterval(3)).Error!.Code.ShouldBe("not_found");
+	s.Decide(new AmendInterval(3, End: TaskScenario.At.AddSeconds(100))).Error!.Code.ShouldBe("not_found");
 	s.Send(new AmendInterval(1, End: TaskScenario.At.AddSeconds(40)));
 	s.Send(new AmendInterval(2, End: TaskScenario.At.AddSeconds(100)));
 	s.Task.RawSeconds.ShouldBe(100);
@@ -89,6 +89,65 @@ public sealed class CorrectionTests
 	s.Decide(new AmendInterval(1)).Error!.Code.ShouldBe("invalid_transition");
 	s.Decide(new ReassignTask(project)).Error!.Code.ShouldBe("invalid_transition");
 	s.Decide(new ChangeTaskRef("new-ref")).Error!.Code.ShouldBe("invalid_transition");
+  }
+
+  [Theory]
+  [InlineData(TaskState.Running)]
+  [InlineData(TaskState.Paused)]
+  [InlineData(TaskState.Stopped)]
+  public void Empty_amendments_are_validation_refusals_without_events(TaskState state)
+  {
+	var s = new TaskScenario(); s.Reach(state);
+	var result = s.Decide(new AmendInterval(1));
+	result.Error!.Code.ShouldBe("validation");
+	result.Error.Message.ShouldBe("Specify an interval start or end to amend.");
+	result.Events.ShouldBeEmpty();
+  }
+
+  [Theory]
+  [InlineData(TaskState.Running)]
+  [InlineData(TaskState.Paused)]
+  [InlineData(TaskState.Stopped)]
+  public void Amendments_apply_in_each_editable_state(TaskState state)
+  {
+	var s = new TaskScenario(); s.Reach(state);
+	var snapshot = s.Task.Snapshot;
+	var start = TaskScenario.At.AddSeconds(-1);
+	s.Send(new AmendInterval(1, Start: start));
+	s.Task.Timeline.Single().Start.ShouldBe(start);
+	s.Task.StartedAt.ShouldBe(start);
+	s.Task.State.ShouldBe(state);
+	s.Task.Snapshot.ShouldBe(snapshot);
+  }
+
+  [Theory]
+  [InlineData(TaskState.Running)]
+  [InlineData(TaskState.Paused)]
+  [InlineData(TaskState.Stopped)]
+  public void Reassignment_applies_in_each_editable_state(TaskState state)
+  {
+	var s = new TaskScenario(); s.Reach(state);
+	var project = Guid.CreateVersion7();
+	s.Catalogue.Send(new AddProject(project, s.Catalogue.ClientId, "other", Rate: 999m));
+	var snapshot = s.Task.Snapshot;
+	s.Send(new ReassignTask(project));
+	s.Task.ProjectId.ShouldBe(project);
+	s.Task.State.ShouldBe(state);
+	s.Task.Snapshot.ShouldBe(snapshot);
+  }
+
+  [Theory]
+  [InlineData(TaskState.Running)]
+  [InlineData(TaskState.Paused)]
+  [InlineData(TaskState.Stopped)]
+  public void Ref_changes_and_clears_apply_in_each_editable_state(TaskState state)
+  {
+	var s = new TaskScenario(); s.Reach(state);
+	s.Send(new ChangeTaskRef("new-ref"));
+	s.Task.Ref.ShouldBe("new-ref");
+	s.Send(new ChangeTaskRef(null));
+	s.Task.Ref.ShouldBeNull();
+	s.Task.State.ShouldBe(state);
   }
 
   [Theory]

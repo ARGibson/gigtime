@@ -22,19 +22,22 @@ public static class CatalogueDecider
 
   private static Decision Defaults(CatalogueView state, SetDefaults c)
   {
-	if (!CatalogueRules.ValidTimezone(c.Timezone) || !CatalogueRules.ValidRounding(c.Rounding)
-		|| (c.WeekStarts.HasValue && !Enum.IsDefined(c.WeekStarts.Value)))
-	  return Invalid(c, "Use a known timezone, weekday and nearest-minute rounding.");
+	if (!CatalogueRules.ValidTimezone(c.Timezone)) return Invalid(c, "Unknown timezone.");
+	if (!CatalogueRules.ValidRounding(c.Rounding)) return Invalid(c, "Unsupported rounding; use nearest-minute.");
+	if (c.WeekStarts.HasValue && !Enum.IsDefined(c.WeekStarts.Value)) return Invalid(c, "Unknown week-start day.");
 	return Decision.Accept(new DefaultsChanged(c.Timezone, c.WeekStarts, c.Rounding));
   }
 
   private static Decision Add(CatalogueView state, AddClient c)
   {
-	if (!CatalogueRules.ValidId(c.ClientId) || state.FindClient(c.ClientId) is not null
-		|| !CatalogueRules.ValidKey(c.Key) || state.FindClient(c.Key) is not null
-		|| string.IsNullOrWhiteSpace(c.Name) || !CatalogueRules.ValidCurrency(c.Currency)
-		|| !CatalogueRules.ValidTimezone(c.Timezone) || !CatalogueRules.ValidRounding(c.Rounding))
-	  return Invalid(c, "Supply a new UUIDv7, unique key, display name, ISO 4217 currency and supported settings.");
+	if (!CatalogueRules.ValidId(c.ClientId)) return Invalid(c, "Client id must be a UUIDv7.");
+	if (state.FindClient(c.ClientId) is not null) return Invalid(c, "Client id already exists.");
+	if (!CatalogueRules.ValidKey(c.Key)) return Invalid(c, "Invalid client key; use 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.");
+	if (state.FindClient(c.Key) is not null) return Invalid(c, "Duplicate client key.");
+	if (string.IsNullOrWhiteSpace(c.Name)) return Invalid(c, "Client name cannot be blank.");
+	if (!CatalogueRules.ValidCurrency(c.Currency)) return Invalid(c, "Unknown ISO 4217 currency.");
+	if (!CatalogueRules.ValidTimezone(c.Timezone)) return Invalid(c, "Unknown timezone.");
+	if (!CatalogueRules.ValidRounding(c.Rounding)) return Invalid(c, "Unsupported rounding; use nearest-minute.");
 	return Decision.Accept(new ClientAdded(c.ClientId, c.Key, c.Name, c.Currency, c.Timezone, c.Rounding));
   }
 
@@ -43,10 +46,12 @@ public static class CatalogueDecider
 	var old = state.FindClient(c.ClientId);
 	if (old is null) return Missing(c);
 	var key = c.Key.Resolve(old.Key);
-	if (!CatalogueRules.ValidKey(key) || state.Clients.Values.Any(x => x.Id != old.Id && x.Key == key)
-		|| string.IsNullOrWhiteSpace(c.Name.Resolve(old.Name)) || !CatalogueRules.ValidCurrency(c.Currency.Resolve(old.Currency))
-		|| !CatalogueRules.ValidTimezone(c.Timezone.Resolve(old.Timezone)) || !CatalogueRules.ValidRounding(c.Rounding.Resolve(old.Rounding)))
-	  return Invalid(c, "Changed client settings must retain a unique key and valid name, currency, timezone and rounding.");
+	if (!CatalogueRules.ValidKey(key)) return Invalid(c, "Invalid client key; use 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.");
+	if (state.Clients.Values.Any(x => x.Id != old.Id && x.Key == key)) return Invalid(c, "Duplicate client key.");
+	if (string.IsNullOrWhiteSpace(c.Name.Resolve(old.Name))) return Invalid(c, "Client name cannot be blank.");
+	if (!CatalogueRules.ValidCurrency(c.Currency.Resolve(old.Currency))) return Invalid(c, "Unknown ISO 4217 currency.");
+	if (!CatalogueRules.ValidTimezone(c.Timezone.Resolve(old.Timezone))) return Invalid(c, "Unknown timezone.");
+	if (!CatalogueRules.ValidRounding(c.Rounding.Resolve(old.Rounding))) return Invalid(c, "Unsupported rounding; use nearest-minute.");
 	return Decision.Accept(new ClientChanged(c.ClientId, c.Key, c.Name, c.Currency, c.Timezone, c.Rounding));
   }
 
@@ -55,10 +60,12 @@ public static class CatalogueDecider
 	var client = state.FindClient(c.ClientId);
 	if (client is null) return Missing(c);
 	if (client.Archived) return Invalid(c, "The client is archived.");
-	if (!CatalogueRules.ValidId(c.ProjectId) || state.FindProject(c.ProjectId) is not null
-		|| !CatalogueRules.ValidKey(c.Key) || state.FindProject(c.ClientId, c.Key) is not null
-		|| c.Rate < 0 || !CatalogueRules.ValidRounding(c.Rounding))
-	  return Invalid(c, "Supply a new UUIDv7, a key unique within this client, a nonnegative rate and supported rounding.");
+	if (!CatalogueRules.ValidId(c.ProjectId)) return Invalid(c, "Project id must be a UUIDv7.");
+	if (state.FindProject(c.ProjectId) is not null) return Invalid(c, "Project id already exists.");
+	if (!CatalogueRules.ValidKey(c.Key)) return Invalid(c, "Invalid project key; use 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.");
+	if (state.FindProject(c.ClientId, c.Key) is not null) return Invalid(c, "Duplicate project key within this client.");
+	if (c.Rate < 0) return Invalid(c, "Project rate cannot be negative.");
+	if (!CatalogueRules.ValidRounding(c.Rounding)) return Invalid(c, "Unsupported rounding; use nearest-minute.");
 	return Decision.Accept(new ProjectAdded(c.ProjectId, c.ClientId, c.Key, c.Name, c.Rate, c.Rounding));
   }
 
@@ -67,9 +74,10 @@ public static class CatalogueDecider
 	var old = state.FindProject(c.ProjectId);
 	if (old is null) return Missing(c);
 	var key = c.Key.Resolve(old.Key);
-	if (!CatalogueRules.ValidKey(key) || state.Projects.Values.Any(x => x.Id != old.Id && x.ClientId == old.ClientId && x.Key == key)
-		|| c.Rate.Resolve(old.Rate) < 0 || !CatalogueRules.ValidRounding(c.Rounding.Resolve(old.Rounding)))
-	  return Invalid(c, "Changed project settings must retain a unique key, nonnegative rate and supported rounding.");
+	if (!CatalogueRules.ValidKey(key)) return Invalid(c, "Invalid project key; use 1–32 lowercase letters, digits or hyphens, starting with a letter or digit.");
+	if (state.Projects.Values.Any(x => x.Id != old.Id && x.ClientId == old.ClientId && x.Key == key)) return Invalid(c, "Duplicate project key within this client.");
+	if (c.Rate.Resolve(old.Rate) < 0) return Invalid(c, "Project rate cannot be negative.");
+	if (!CatalogueRules.ValidRounding(c.Rounding.Resolve(old.Rounding))) return Invalid(c, "Unsupported rounding; use nearest-minute.");
 	return Decision.Accept(new ProjectChanged(c.ProjectId, c.Key, c.Name, c.Rate, c.Rounding));
   }
 

@@ -75,6 +75,7 @@ public static class TaskDecider
 
   private static Decision Amend(TaskView task, AmendInterval c)
   {
+	if (!c.Start.HasValue && !c.End.HasValue) return Invalid(task, c, "Specify an interval start or end to amend.");
 	var index = task.Timeline.FindIndex(i => i.Number == c.Interval);
 	if (index < 0) return Decision.Refuse("not_found", "No such interval.", State(task), c.Command);
 	var intervals = task.Timeline.ToArray();
@@ -103,7 +104,19 @@ public static class TaskDecider
   private static Decision Invalid(TaskView task, TaskCommand c, string message) => Decision.Refuse("validation", message, State(task), c.Command);
   private static Decision Transition(TaskView task, TaskCommand c)
   {
-	var hint = task.State switch { TaskState.Running => "gig pause", TaskState.Paused => "gig resume", TaskState.Stopped => "gig start", _ => "gig start" };
-	return Decision.Refuse("invalid_transition", $"Task {task.Id} is {State(task)}; {c.Command} does not apply — use {hint}.", State(task), c.Command, hint);
+	var hint = (task.State, c) switch
+	{
+	  (TaskState.Running or TaskState.Paused, StartTask or RecordTask or VoidTask) => "gig stop",
+	  (TaskState.Paused, PauseTask) => "gig resume",
+	  (TaskState.Stopped, StartTask or RecordTask or PauseTask or ResumeTask or StopTask) => "gig start",
+	  (TaskState.Voided, _) => "gig start",
+	  _ => null
+	};
+	var message = (task.State, c) switch
+	{
+	  (TaskState.Running, ResumeTask) => $"Task {task.Id} is running; no resume is needed.",
+	  _ => $"Task {task.Id} is {State(task)}; {c.Command} does not apply." + (hint is null ? "" : $" Use {hint}.")
+	};
+	return Decision.Refuse("invalid_transition", message, State(task), c.Command, hint);
   }
 }
