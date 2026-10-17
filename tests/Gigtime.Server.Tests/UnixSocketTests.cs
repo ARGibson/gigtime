@@ -95,7 +95,8 @@ public sealed class UnixSocketTests
 		}
 
 		var logs = await output + await errors;
-		logs.ShouldContain("Now listening on: http://unix:");
-		logs.ShouldNotContain("Now listening on: http://127.0.0.1");
+		var listeners = logs.Split('\n').Where(line => line.Contains("Now listening on:", StringComparison.Ordinal)).ToArray();
+		listeners.ShouldNotBeEmpty();
+		listeners.ShouldAllBe(line => line.Contains("Now listening on: http://unix:", StringComparison.Ordinal));
 	}
 }

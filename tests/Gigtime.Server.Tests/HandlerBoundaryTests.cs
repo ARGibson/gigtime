@@ -16,11 +16,15 @@ public sealed class HandlerBoundaryTests
 	public void Handlers_reference_no_Fisher_types_in_signatures_locals_or_calls()
 	{
 		var assembly = typeof(Program).Assembly;
-		var types = assembly.GetTypes().Where(t => t.Namespace is "Gigtime.Server.Catalogue" or "Gigtime.Server.Tasks").ToArray();
+		var types = assembly.GetTypes().Where(IsFeatureType).ToArray();
+
+		const BindingFlags members = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance
+			| BindingFlags.DeclaredOnly;
 
 		var methods = types
-			.SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance
-				| BindingFlags.DeclaredOnly))
+			.SelectMany(t => t.GetMethods(members))
+			.Cast<MethodBase>()
+			.Concat(types.SelectMany(t => t.GetConstructors(members)))
 			.ToArray();
 
 		methods.ShouldNotBeEmpty();
@@ -28,6 +32,16 @@ public sealed class HandlerBoundaryTests
 		foreach (var type in types)
 		{
 			AssertNoFisher(type.BaseType);
+			AssertAttributes(type.GetCustomAttributesData());
+			foreach (var contract in type.GetInterfaces()) AssertNoFisher(contract);
+
+			foreach (var property in type.GetProperties(
+								BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
+			{
+				AssertNoFisher(property.PropertyType);
+				AssertAttributes(property.GetCustomAttributesData());
+				foreach (var parameter in property.GetIndexParameters()) AssertAttributes(parameter.GetCustomAttributesData());
+			}
 
 			foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
 				AssertNoFisher(field.FieldType);
@@ -35,8 +49,19 @@ public sealed class HandlerBoundaryTests
 
 		foreach (var method in methods)
 		{
-			AssertNoFisher(method.ReturnType);
-			foreach (var parameter in method.GetParameters()) AssertNoFisher(parameter.ParameterType);
+			if (method is MethodInfo info)
+			{
+				AssertNoFisher(info.ReturnType);
+				AssertAttributes(info.ReturnParameter.GetCustomAttributesData());
+			}
+
+			AssertAttributes(method.GetCustomAttributesData());
+
+			foreach (var parameter in method.GetParameters())
+			{
+				AssertNoFisher(parameter.ParameterType);
+				AssertAttributes(parameter.GetCustomAttributesData());
+			}
 
 			if (method.GetMethodBody() is not { } body) continue;
 
@@ -52,9 +77,15 @@ public sealed class HandlerBoundaryTests
 				{
 					var member = method.Module.ResolveMember(BitConverter.ToInt32(bytes, offset),
 						method.DeclaringType?.GenericTypeArguments,
-						method.GetGenericArguments());
+						method is MethodInfo generic ? generic.GetGenericArguments() : Type.EmptyTypes);
 
 					AssertNoFisher(member as Type ?? member?.DeclaringType);
+
+					if (member is MethodInfo called)
+					{
+						foreach (var argument in called.GetGenericArguments())
+							AssertNoFisher(argument);
+					}
 				}
 
 				offset += operation.OperandType switch
@@ -70,11 +101,47 @@ public sealed class HandlerBoundaryTests
 		}
 	}
 
+	private static bool IsFeatureType(Type type)
+	{
+		var name = type.Namespace;
+
+		return name is not null && name.StartsWith("Gigtime.Server.", StringComparison.Ordinal)
+			&& name != "Gigtime.Server.Hosting" && !name.StartsWith("Gigtime.Server.Hosting.", StringComparison.Ordinal)
+			&& !name.StartsWith("Gigtime.Server.Generated", StringComparison.Ordinal)
+			&& !name.StartsWith("Gigtime.Server.Internal.Generated", StringComparison.Ordinal);
+	}
+
+	private static void AssertAttributes(IList<CustomAttributeData> attributes)
+	{
+		foreach (var attribute in attributes)
+		{
+			AssertNoFisher(attribute.AttributeType);
+			foreach (var argument in attribute.ConstructorArguments) AssertAttributeArgument(argument);
+			foreach (var argument in attribute.NamedArguments) AssertAttributeArgument(argument.TypedValue);
+		}
+	}
+
+	private static void AssertAttributeArgument(CustomAttributeTypedArgument argument)
+	{
+		AssertNoFisher(argument.ArgumentType);
+		if (argument.Value is Type type) AssertNoFisher(type);
+
+		if (argument.Value is IEnumerable<CustomAttributeTypedArgument> values)
+		{
+			foreach (var value in values)
+				AssertAttributeArgument(value);
+		}
+	}
+
 	private static void AssertNoFisher(Type? type)
 	{
 		if (type is null) return;
 
-		(type.Namespace?.StartsWith("Fisher", StringComparison.Ordinal) == true).ShouldBeFalse($"Handler references {type}");
+		var name = type.Assembly.GetName().Name!;
+
+		(name is "Wolverine.Fisher" or "Weasel.Sqlite" || name.StartsWith("Fisher", StringComparison.Ordinal))
+			.ShouldBeFalse($"Handler references {type} from forbidden assembly {name}");
+
 		if (type.HasElementType) AssertNoFisher(type.GetElementType());
 		foreach (var argument in type.GenericTypeArguments) AssertNoFisher(argument);
 	}

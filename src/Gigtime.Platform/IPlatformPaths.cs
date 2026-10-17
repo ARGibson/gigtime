@@ -9,15 +9,26 @@ public interface IPlatformPaths
 
 public sealed class LinuxPlatformPaths : IPlatformPaths
 {
-	public string DataDirectory { get; } = Root("XDG_DATA_HOME", Path.Combine(Home, ".local", "share"));
-	public string RuntimeDirectory { get; } = Root("XDG_RUNTIME_DIR", Path.Combine(Path.GetTempPath(), $"gigtime-{Environment.UserName}"));
-	public string ConfigDirectory { get; } = Root("XDG_CONFIG_HOME", Path.Combine(Home, ".config"));
-	private static string Home => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+	public string DataDirectory { get; }
+	public string RuntimeDirectory { get; }
+	public string ConfigDirectory { get; }
 
-	private static string Root(string variable, string fallback)
+	public LinuxPlatformPaths() : this(Environment.GetEnvironmentVariable("XDG_DATA_HOME"),
+		Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR"),
+		Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
+		Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+		Path.GetTempPath())
+	{ }
+
+	internal LinuxPlatformPaths(string? data, string? runtime, string? config, string home, string temporary)
 	{
-		var value = Environment.GetEnvironmentVariable(variable);
+		DataDirectory = Root(data, Path.Combine(home, ".local", "share"));
+		RuntimeDirectory = LinuxRuntimeDirectory.Resolve(runtime, Path.Combine(temporary, $"gigtime-{Environment.UserName}"));
+		ConfigDirectory = Root(config, Path.Combine(home, ".config"));
+	}
 
+	private static string Root(string? value, string fallback)
+	{
 		return value is not null && Path.IsPathFullyQualified(value) ? value : fallback;
 	}
 }

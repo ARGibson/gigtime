@@ -1,17 +1,24 @@
-using System.Data.Common;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.Data.Sqlite;
 
 namespace Gigtime.Server.Hosting;
 
 public sealed partial class CommandExceptions(ILogger<CommandExceptions> log) : IExceptionHandler
 {
+	private const int Busy = 5;
+	private const int Locked = 6;
+	private const int CantOpen = 14;
+	private const int IoError = 10;
+	private const int Full = 13;
+
 	public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
 	{
 		var code = exception switch
 		{
 			EventStreamUnexpectedMaxEventIdException or StreamLockedException => "conflict",
 			BadHttpRequestException or System.Text.Json.JsonException => "validation",
-			DbException or IOException or TimeoutException => "unavailable",
+			SqliteException { SqliteErrorCode: Busy or Locked or CantOpen or IoError or Full } => "unavailable",
+			IOException or TimeoutException => "unavailable",
 			_ => "internal",
 		};
 
