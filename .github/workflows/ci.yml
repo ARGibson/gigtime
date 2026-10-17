@@ -58,6 +58,12 @@ jobs:
       - name: Check indentation
         run: dotnet run scripts/check-indentation.cs
 
+      # The end-to-end tests drive zsh completion; the runner image has no zsh.
+      - name: Install zsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends zsh
+
       - name: Test
         run: dotnet test -c Release --no-build --report-xunit-trx --results-directory TestResults
 
