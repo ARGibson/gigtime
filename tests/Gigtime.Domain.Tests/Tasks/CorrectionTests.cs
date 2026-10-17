@@ -1,0 +1,103 @@
+using Gigtime.Domain.Catalogue;
+using Gigtime.Domain.Tasks;
+using Shouldly;
+using Xunit;
+
+namespace Gigtime.Domain.Tests.Tasks;
+
+public sealed class CorrectionTests
+{
+  [Fact]
+  public void Amendments_reject_overlap_and_keep_snapshot_after_catalogue_changes()
+  {
+	var s = new TaskScenario(); s.Start();
+	s.Send(new PauseTask(TaskScenario.At.AddSeconds(20)));
+	s.Send(new ResumeTask(TaskScenario.At.AddSeconds(40)));
+	s.Send(new StopTask(TaskScenario.At.AddSeconds(60)));
+	s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(999m)));
+	s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Currency: Change.Set("EUR")));
+	s.Task.RoundedSeconds.ShouldBe(60);
+	s.Task.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
+	TaskMath.Earnings(s.Task).ShouldBe(2m);
+	var overlap = s.Decide(new AmendInterval(1, End: TaskScenario.At.AddSeconds(41)));
+	overlap.Error!.Code.ShouldBe("validation");
+	overlap.Events.ShouldBeEmpty();
+	s.Decide(new AmendInterval(2, Start: TaskScenario.At.AddSeconds(19))).Error!.Code.ShouldBe("validation");
+	s.Decide(new AmendInterval(2, End: TaskScenario.At.AddSeconds(39))).Error!.Code.ShouldBe("validation");
+	s.Decide(new AmendInterval(3)).Error!.Code.ShouldBe("not_found");
+	s.Send(new AmendInterval(1, End: TaskScenario.At.AddSeconds(40)));
+	s.Send(new AmendInterval(2, End: TaskScenario.At.AddSeconds(100)));
+	s.Task.RawSeconds.ShouldBe(100);
+	s.Task.RoundedSeconds.ShouldBe(120);
+	TaskMath.Earnings(s.Task).ShouldBe(4m);
+  }
+
+  [Fact]
+  public void Backfill_does_not_claim_the_open_task_and_freezes_policy()
+  {
+	var s = new TaskScenario(); s.Start();
+	var recorded = new TaskView();
+	var result = TaskDecider.Decide(recorded, s.Tracker, s.Catalogue.State,
+		new RecordTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At.AddHours(-1), TaskScenario.At));
+	result.IsSuccess.ShouldBeTrue();
+	result.Events.Count.ShouldBe(1);
+	recorded.Evolve(result.Events.Single());
+	recorded.State.ShouldBe(TaskState.Stopped);
+	recorded.RawSeconds.ShouldBe(3600);
+	recorded.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
+	s.Tracker.TaskId.ShouldBe(s.Task.Id);
+  }
+
+  [Theory]
+  [InlineData(false)]
+  [InlineData(true)]
+  public void Archived_client_or_project_cannot_start_or_backfill(bool client)
+  {
+	var s = new TaskScenario();
+	if (client) s.Catalogue.Send(new ArchiveClient(s.Catalogue.ClientId));
+	else s.Catalogue.Send(new ArchiveProject(s.Catalogue.ProjectId));
+	s.Decide(new StartTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At)).Error!.Code.ShouldBe("validation");
+	s.Decide(new RecordTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At, TaskScenario.At)).Error!.Code.ShouldBe("validation");
+  }
+
+  [Fact]
+  public void Invalid_timestamps_and_missing_projects_are_refused()
+  {
+	var s = new TaskScenario();
+	s.Decide(new StartTask("BAD", s.Catalogue.ProjectId, null, TaskScenario.At)).Error!.Code.ShouldBe("validation");
+	s.Decide(new StartTask("123abc", Guid.CreateVersion7(), null, TaskScenario.At)).Error!.Code.ShouldBe("not_found");
+	s.Decide(new RecordTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At, TaskScenario.At.AddSeconds(-1))).Error!.Code.ShouldBe("validation");
+	s.Start();
+	s.Decide(new PauseTask(TaskScenario.At.AddSeconds(-1))).Error!.Code.ShouldBe("validation");
+	s.Decide(new StopTask(TaskScenario.At.AddSeconds(-1))).Error!.Code.ShouldBe("validation");
+	s.Decide(new AmendInterval(1, End: TaskScenario.At.AddSeconds(10))).Error!.Code.ShouldBe("validation");
+	s.Send(new PauseTask(TaskScenario.At.AddSeconds(10)));
+	s.Decide(new ResumeTask(TaskScenario.At.AddSeconds(9))).Error!.Code.ShouldBe("validation");
+	s.Decide(new StopTask(TaskScenario.At.AddSeconds(9))).Error!.Code.ShouldBe("validation");
+  }
+
+  [Fact]
+  public void Reassignment_and_ref_clear_preserve_the_stopped_snapshot()
+  {
+	var s = new TaskScenario(); s.Reach(TaskState.Stopped);
+	var project = Guid.CreateVersion7();
+	s.Catalogue.Send(new AddProject(project, s.Catalogue.ClientId, "other", Rate: 999m));
+	s.Send(new ReassignTask(project)); s.Send(new ChangeTaskRef(null));
+	s.Task.ProjectId.ShouldBe(project); s.Task.Ref.ShouldBeNull();
+	s.Task.Snapshot!.Rate.ShouldBe(120m);
+	s.Send(new VoidTask());
+	s.Decide(new AmendInterval(1)).Error!.Code.ShouldBe("invalid_transition");
+	s.Decide(new ReassignTask(project)).Error!.Code.ShouldBe("invalid_transition");
+	s.Decide(new ChangeTaskRef("new-ref")).Error!.Code.ShouldBe("invalid_transition");
+  }
+
+  [Theory]
+  [InlineData(0, 0)]
+  [InlineData(29, 0)]
+  [InlineData(30, 60)]
+  [InlineData(59, 60)]
+  [InlineData(60, 60)]
+  [InlineData(89, 60)]
+  [InlineData(90, 120)]
+  public void Rounding_is_half_up_on_the_summed_seconds(long raw, long rounded) => TaskMath.Round(raw).ShouldBe(rounded);
+}
