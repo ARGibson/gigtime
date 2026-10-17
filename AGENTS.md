@@ -57,7 +57,7 @@ gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property bel
   - *Family:* a closed set of one-line records that one feature owns, in a file named for the set: an aggregate's commands with their base record (`TaskCommand.cs`), its events (`TaskEvents.cs`), or one resource's requests (`TaskRequests.cs`) or response DTOs (`TaskDtos.cs`).
   - *Arity:* a type and its generic forms, in the file named after the non-generic type: `Change.cs` holds `Change` and `Change<T>`.
   - *Satellite:* a main type with the small records and enums that only it uses, declared below it, in `<MainType>.cs`. `TaskView.cs` may hold `TaskView`, `TaskState` and `Interval`.
-  - *Pair:* an interface and its one implementation, in the interface's file.
+  - *Pair:* an interface and its one implementation, in a file named for the concept without the `I`: `PlatformPaths.cs` holds `IPlatformPaths` and `LinuxPlatformPaths`.
 - **Move a type into its own file** once code outside the feature uses it, or once it gains a member body longer than one line.
 - **Use file-scoped namespaces, `var`, records for events and DTOs, and collection expressions (`[]`).** Do not use `#region`.
 - **Name private fields in bare camelCase, without a leading underscore:** `private readonly ILogger<CatalogueStore> log;`. Name constants in PascalCase. End every method that returns `Task` or `ValueTask` in `Async`, including Wolverine's `HandleAsync`, `LoadAsync` and `ValidateAsync`; test methods are exempt. The build enforces the suffix on methods marked `async`.
