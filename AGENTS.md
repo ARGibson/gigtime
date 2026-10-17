@@ -53,8 +53,9 @@ gigtime follows [CUPID](https://cupid.dev/) rather than SOLID. Each property bel
 
 - **Group by feature.** Keep an aggregate or decider, its events, its endpoints and its projections in one feature folder. Mirror that folder in the test project.
 - **Give each type its own file, named after it, unless it belongs to a group below.** Split a file by responsibility as it nears 300 lines; never split only to meet a line count.
-- **Group small types in one file when they are read together.** A group holds at most one type with behaviour; the rest are records, enums or one-line interfaces. Three groups are allowed:
-  - *Family:* an aggregate's events in `<Aggregate>Events.cs`, or one endpoint's request and response records in `<Endpoint>Contracts.cs`.
+- **Group small types in one file when they are read together.** A group holds at most one type with behaviour; the rest are records, enums or one-line interfaces. Four groups are allowed:
+  - *Family:* a closed set of one-line records that one feature owns, in a file named for the set: an aggregate's commands with their base record (`TaskCommand.cs`), its events (`TaskEvents.cs`), or one resource's requests (`TaskRequests.cs`) or response DTOs (`TaskDtos.cs`).
+  - *Arity:* a type and its generic forms, in the file named after the non-generic type: `Change.cs` holds `Change` and `Change<T>`.
   - *Satellite:* a main type with the small records and enums that only it uses, declared below it, in `<MainType>.cs`. `TaskView.cs` may hold `TaskView`, `TaskState` and `Interval`.
   - *Pair:* an interface and its one implementation, in the interface's file.
 - **Move a type into its own file** once code outside the feature uses it, or once it gains a member body longer than one line.
