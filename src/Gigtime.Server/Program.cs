@@ -5,12 +5,10 @@ using JasperFx.CodeGeneration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wolverine;
 
-// #28: disable configuration file watchers before host defaults create their providers.
-Environment.SetEnvironmentVariable("DOTNET_hostBuilder__reloadConfigOnChange", "false");
-
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
-	Args = args,
+	// #28: disable configuration file watchers before host defaults create their providers.
+	Args = [.. args, "--hostBuilder:reloadConfigOnChange=false"],
 	ContentRootPath = AppContext.BaseDirectory,
 });
 

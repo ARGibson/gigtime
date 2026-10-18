@@ -164,6 +164,24 @@ public sealed class SetupCompletionTests(PublishedFixture published)
 	}
 
 	[Theory]
+	[InlineData(" ")]
+	[InlineData("\t")]
+	public async Task Setup_rejects_daemon_folder_ending_in_whitespace_without_manager_calls(string whitespace)
+	{
+		await using var day = new DaySession(published);
+		var directory = Path.Combine(day.Root, "daemon" + whitespace);
+		Directory.CreateDirectory(directory);
+		var daemon = Path.Combine(directory, "gigtimed");
+		File.Copy(Path.Combine(published.Application, "gigtimed"), daemon);
+		await day.RefusalAsync(5, "config", "setup", "--gigtimed", daemon);
+		var human = await day.GigAsync("setup", "--gigtimed", daemon);
+		human.ExitCode.ShouldBe(5);
+		human.Error.ShouldContain("ends in unsupported whitespace");
+		File.Exists(day.Environment["GIGTIME_TEST_SYSTEMCTL_LOG"]).ShouldBeFalse();
+		Directory.Exists(Path.Combine(day.Environment["XDG_CONFIG_HOME"], "systemd")).ShouldBeFalse();
+	}
+
+	[Theory]
 	[InlineData("\"")]
 	[InlineData("\\")]
 	[InlineData("$")]

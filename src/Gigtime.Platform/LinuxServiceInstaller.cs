@@ -59,6 +59,12 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 
 	public static void ValidateExecutablePath(string executable)
 	{
+		// #28: systemd strips trailing whitespace from WorkingDirectory.
+		var directory = Path.GetDirectoryName(executable);
+
+		if (directory is { Length: > 0 } && char.IsWhiteSpace(directory[^1]))
+			throw new IOException($"gigtimed folder '{directory}' ends in unsupported whitespace.");
+
 		foreach (var character in new[] { '"', '\\', '$' })
 		{
 			if (executable.Contains(character, StringComparison.Ordinal))
