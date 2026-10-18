@@ -23,6 +23,7 @@ public sealed class UnixSocketTests
 		};
 
 		start.ArgumentList.Add(ServerExecutable.Path);
+		start.Environment.Remove("GIGTIME_INSTANCE");
 		start.Environment["XDG_DATA_HOME"] = Path.Combine(directory, "data");
 		start.Environment["XDG_RUNTIME_DIR"] = Path.Combine(directory, "runtime");
 		start.Environment["XDG_CONFIG_HOME"] = Path.Combine(directory, "config");

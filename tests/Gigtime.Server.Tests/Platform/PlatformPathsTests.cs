@@ -105,6 +105,7 @@ public sealed class PlatformPathsTests
 			};
 
 			start.ArgumentList.Add(ServerExecutable.Path);
+			start.Environment.Remove("GIGTIME_INSTANCE");
 			start.Environment["TMPDIR"] = root;
 			start.Environment["XDG_DATA_HOME"] = Path.Combine(root, "data");
 			start.Environment["XDG_CONFIG_HOME"] = Path.Combine(root, "config");

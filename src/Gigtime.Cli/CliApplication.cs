@@ -64,6 +64,17 @@ public sealed class CliApplication(
 
 	public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
 	{
+		try
+		{
+			GigtimeInstance.FromEnvironment();
+		}
+		catch (ArgumentException exception)
+		{
+			var failure = new CliExchange(output, error, isTerminal, noColor, paths, new Option<bool>("--json"), clock);
+
+			return failure.Fail("gig", ErrorCodes.Config, exception.Message, args.Contains("--json", StringComparer.Ordinal));
+		}
+
 		var root = CreateCommand();
 		var json = (Option<bool>)root.Options.Single(o => o.Name == "--json");
 		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json, clock);

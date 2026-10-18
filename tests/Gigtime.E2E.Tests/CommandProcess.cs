@@ -17,6 +17,7 @@ internal static class CommandProcess
 			RedirectStandardError = true,
 		};
 
+		start.Environment.Remove("GIGTIME_INSTANCE");
 		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		foreach (var (key, value) in environment) start.Environment[key] = value;
 		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");

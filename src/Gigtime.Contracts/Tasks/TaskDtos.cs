@@ -23,4 +23,4 @@ public sealed record TaskDto(
 
 public sealed record TasksDto(IReadOnlyList<TaskDto> Tasks);
 
-public sealed record StatusDto(TaskDto? Task);
+public sealed record StatusDto(TaskDto? Task, string? Instance = null);

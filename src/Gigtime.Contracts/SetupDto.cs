@@ -10,4 +10,5 @@ public sealed record SetupDto(
 	string DatabasePath,
 	bool Healthy,
 	bool Changed,
-	bool SocketActivation);
+	bool SocketActivation,
+	string? Instance = null);

@@ -115,8 +115,13 @@ public sealed class InstallScriptTests(PublishedFixture published)
 
 		var installed = await InstallAsync(day, Pair(day, "1000006"), "--prefix", root, "--bin-dir", bin);
 		installed.ExitCode.ShouldBe(0, installed.Output + installed.Error);
-		Directory.GetDirectories(Path.Combine(root, "releases")).Select(Path.GetFileName).Order()
+
+		Directory
+			.GetDirectories(Path.Combine(root, "releases"))
+			.Select(Path.GetFileName)
+			.Order()
 			.ShouldBe(["1000003", "1000005", "1000006"]);
+
 		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe("releases/1000006");
 		File.Exists(Path.Combine(root, "releases/1000003/gig")).ShouldBeTrue();
 	}
@@ -222,6 +227,7 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		var good = await InstallAsync(day, Pair(day, "aaaaaaa"));
 		good.ExitCode.ShouldBe(0, good.Output + good.Error);
 		var units = Units(day);
+
 		foreach (var label in new[] { "0000001", "0000002", "0000003" })
 		{
 			var old = Path.Combine(Root(day), "releases", label);
@@ -258,6 +264,74 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		refused.Error.ShouldContain("data directory");
 		Directory.GetFileSystemEntries(day.Environment["XDG_DATA_HOME"]).ShouldBeEmpty();
 		Directory.Exists(Root(day)).ShouldBeFalse();
+	}
+
+	[Fact]
+	public async Task Named_instance_reuses_shared_binaries_and_sets_up_only_its_units()
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		var source = Pair(day, "aaaaaaa");
+		var installed = await InstallAsync(day, source);
+		installed.ExitCode.ShouldBe(0, installed.Output + installed.Error);
+		var originalUnits = Units(day);
+		var releaseTime = Directory.GetLastWriteTimeUtc(Path.Combine(Root(day), "current"));
+		day.Environment["GIGTIME_INSTANCE"] = "dev";
+		await day.RestartAsync();
+		var named = await InstallAsync(day, source, "--instance", "dev");
+		named.ExitCode.ShouldBe(0, named.Output + named.Error);
+		named.Output.ShouldContain("Health check passed");
+		Directory.GetLastWriteTimeUtc(Path.Combine(Root(day), "current")).ShouldBe(releaseTime);
+		Directory.GetDirectories(Path.Combine(Root(day), "releases")).Select(Path.GetFileName).ShouldBe(["aaaaaaa"]);
+		var units = Units(day);
+		foreach (var (path, expected) in originalUnits) units[path].ShouldBe(expected);
+		var service = Path.Combine(day.Environment["XDG_CONFIG_HOME"], "systemd/user/gigtimed-dev.service");
+		units[service].Content.ShouldContain("Environment=\"GIGTIME_INSTANCE=dev\"");
+		units[service].Content.ShouldContain(Path.Combine(Root(day), "current/gigtimed"));
+
+		units[Path.Combine(day.Environment["XDG_CONFIG_HOME"], "systemd/user/gigtimed-dev.socket")]
+			.Content
+			.ShouldContain(Path.Combine(day.Environment["XDG_RUNTIME_DIR"], "gigtime-dev/gigtimed.sock"));
+
+		(await ManagerLogAsync(day)).ShouldContain("--user try-restart gigtimed-dev.service");
+	}
+
+	[Theory]
+	[InlineData("dev")]
+	[InlineData("../invalid")]
+	public async Task Install_without_instance_flag_ignores_inherited_instance(string inherited)
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		day.Environment["GIGTIME_INSTANCE"] = inherited;
+		var installed = await InstallAsync(day, Pair(day, "aaaaaaa"));
+		installed.ExitCode.ShouldBe(0, installed.Output + installed.Error);
+		installed.Output.ShouldContain("Health check passed");
+		var units = Units(day);
+		units.Keys.Select(Path.GetFileName).Order().ShouldBe(["gigtimed.service", "gigtimed.socket"]);
+		units.Values.ShouldAllBe(unit => !unit.Content.Contains("GIGTIME_INSTANCE", StringComparison.Ordinal));
+		(await ManagerLogAsync(day)).ShouldContain("--user try-restart gigtimed.service");
+	}
+
+	[Theory]
+	[InlineData("--instance")]
+	[InlineData("--instance", "")]
+	[InlineData("--instance", "--force")]
+	[InlineData("--instance", "Dev")]
+	[InlineData("--instance", "dév")]
+	[InlineData("--instance", "../dev")]
+	[InlineData("--instance", "dev_name")]
+	[InlineData("--instance", "1dev")]
+	[InlineData("--instance", "abcdefghijklmnopqrstuvwxyzabcdefg")]
+	[InlineData("--instance", "dev", "--unknown")]
+	public async Task Invalid_instance_arguments_leave_the_sandbox_untouched(params string[] arguments)
+	{
+		await using var day = new DaySession(published);
+		day.Environment["LC_ALL"] = "en_US.utf8";
+		var before = Directory.GetFileSystemEntries(day.Root, "*", SearchOption.AllDirectories).Order().ToArray();
+		var invalid = await CommandProcess.RunAsync("bash", [script, .. arguments], day.Root, day.Environment, TimeSpan.FromSeconds(10));
+		invalid.ExitCode.ShouldBe(2, invalid.Output + invalid.Error);
+		Directory.GetFileSystemEntries(day.Root, "*", SearchOption.AllDirectories).Order().ShouldBe(before);
 	}
 
 	private string Pair(DaySession day, string label, bool badVersion = false, bool badHealth = false)

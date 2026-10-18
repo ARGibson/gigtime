@@ -13,7 +13,7 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 
 		var directory = Path.Combine(paths.ConfigDirectory, "systemd", "user");
 		Directory.CreateDirectory(directory);
-		var socket = Path.Combine(paths.RuntimeDirectory, "gigtime", "gigtimed.sock");
+		var socket = paths.Instance.SocketPath(paths);
 
 		// #28: WorkingDirectory takes a whole path; retain escapes without ExecStart's outer quotes.
 		var workingDirectory = Quote(Path.GetDirectoryName(executable)!)[1..^1];
@@ -23,36 +23,38 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 			+ "\nWorkingDirectory=" + workingDirectory
 			+ "\nEnvironment=" + Quote("XDG_RUNTIME_DIR=" + paths.RuntimeDirectory)
 			+ "\nEnvironment=" + Quote("XDG_DATA_HOME=" + paths.DataDirectory)
-			+ "\nEnvironment=" + Quote("XDG_CONFIG_HOME=" + paths.ConfigDirectory) + "\n\n[Install]\nWantedBy=default.target\n";
+			+ "\nEnvironment=" + Quote("XDG_CONFIG_HOME=" + paths.ConfigDirectory)
+			+ (paths.Instance.Name is { } name ? "\nEnvironment=" + Quote("GIGTIME_INSTANCE=" + name) : "")
+			+ "\n\n[Install]\nWantedBy=default.target\n";
 
 		var socketUnit = "[Unit]\nDescription=gigtime socket\n\n[Socket]\nListenStream="
 			+ socket.Replace("%", "%%", StringComparison.Ordinal)
 			+ "\nSocketMode=0600\nDirectoryMode=0700\n\n[Install]\nWantedBy=sockets.target\n";
 
-		var servicePath = Path.Combine(directory, "gigtimed.service");
-		var socketPath = Path.Combine(directory, "gigtimed.socket");
+		var servicePath = Path.Combine(directory, paths.Instance.ServiceUnit);
+		var socketPath = Path.Combine(directory, paths.Instance.SocketUnit);
 		var fallback = "# Socket activation unavailable; login-started service.\n" + service;
 
 		if (!File.Exists(socketPath) && File.Exists(servicePath) && await File.ReadAllTextAsync(servicePath, cancellationToken) == fallback)
 		{
-			await RequireAsync(["enable", "--now", "gigtimed.service"], cancellationToken);
+			await RequireAsync(["enable", "--now", paths.Instance.ServiceUnit], cancellationToken);
 
 			return new(false, false);
 		}
 
 		var changed = await WriteAsync(servicePath, service, cancellationToken);
-		changed |= await WriteAsync(Path.Combine(directory, "gigtimed.socket"), socketUnit, cancellationToken);
+		changed |= await WriteAsync(Path.Combine(directory, paths.Instance.SocketUnit), socketUnit, cancellationToken);
 		if (changed) await RequireAsync(["daemon-reload"], cancellationToken);
 
-		if (await systemctl(["enable", "--now", "gigtimed.socket"], cancellationToken) == 0)
+		if (await systemctl(["enable", "--now", paths.Instance.SocketUnit], cancellationToken) == 0)
 			return new(changed, true);
 
 		// #5: remove the failed activation unit before enabling the login-started service.
-		await systemctl(["disable", "--now", "gigtimed.socket"], cancellationToken);
+		await systemctl(["disable", "--now", paths.Instance.SocketUnit], cancellationToken);
 		File.Delete(socketPath);
 		await WriteAsync(servicePath, fallback, cancellationToken);
 		await RequireAsync(["daemon-reload"], cancellationToken);
-		await RequireAsync(["enable", "--now", "gigtimed.service"], cancellationToken);
+		await RequireAsync(["enable", "--now", paths.Instance.ServiceUnit], cancellationToken);
 
 		return new(true, false);
 	}

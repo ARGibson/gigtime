@@ -46,7 +46,8 @@ internal static class CompletionCommands
 		{
 			using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 			timeout.CancelAfter(TimeSpan.FromMilliseconds(100));
-			var socketPath = Path.Combine(paths().RuntimeDirectory, "gigtime", "gigtimed.sock");
+			var platformPaths = paths();
+			var socketPath = platformPaths.Instance.SocketPath(platformPaths);
 
 			using var transport = new SocketsHttpHandler
 			{

@@ -24,6 +24,7 @@ public sealed class PublishedFixture : IAsyncLifetime
 		{
 			["ArtifactsPath"] = Path.Combine(Root, "build"),
 			["UseArtifactsOutput"] = "true",
+			["GIGTIME_INSTANCE"] = "",
 			["XDG_DATA_HOME"] = Path.Combine(Root, "build-data"),
 			["XDG_RUNTIME_DIR"] = Path.Combine(Root, "build-runtime"),
 			["XDG_CONFIG_HOME"] = Path.Combine(Root, "build-config"),

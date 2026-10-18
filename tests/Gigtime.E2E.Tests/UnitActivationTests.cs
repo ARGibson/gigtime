@@ -9,12 +9,15 @@ namespace Gigtime.E2E.Tests;
 [Collection("published binaries")]
 public sealed class UnitActivationTests(PublishedFixture published)
 {
-	[Fact]
-	public async Task First_status_activates_the_daemon_using_generated_unit_paths_and_environment()
+	[Theory]
+	[InlineData("")]
+	[InlineData("dev")]
+	public async Task First_status_activates_the_daemon_using_generated_unit_paths_and_environment(string instance)
 	{
 		if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Socket activation requires Linux.");
 
 		await using var day = new DaySession(published);
+		day.Environment["GIGTIME_INSTANCE"] = instance;
 		var application = Path.Combine(day.Root, "application space %");
 
 		foreach (var file in Directory.EnumerateFiles(published.Application, "*", SearchOption.AllDirectories))

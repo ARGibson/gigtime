@@ -43,6 +43,7 @@ public sealed class RenderingTests
 		start.ArgumentList.Add(typeof(CliApplication).Assembly.Location);
 		start.ArgumentList.Add("client");
 		start.ArgumentList.Add("list");
+		start.Environment.Remove("GIGTIME_INSTANCE");
 		start.Environment["CI"] = "true";
 		start.Environment["GITHUB_ACTIONS"] = "true";
 		start.Environment["TF_BUILD"] = "True";
