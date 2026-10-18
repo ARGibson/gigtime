@@ -28,6 +28,9 @@ jobs:
       - name: Test commit checker
         run: bash scripts/check-commits.test.sh
 
+      - name: Test release notes
+        run: bash scripts/release-notes.test.sh
+
       - name: Check pull request commits and branch
         if: github.event_name == 'pull_request'
         env:

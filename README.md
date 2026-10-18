@@ -37,7 +37,33 @@ stores task content. A `ref` must never carry task material: use an unrelated op
 identifier, never a task description, prompt, response or rubric. Examples here use
 fictional clients Acme and Globex. Treat exports as private financial records.
 
-## Build and install
+## Install
+
+Download the Linux x64 archive and checksums from the
+[latest release](https://github.com/ARGibson/gigtime/releases/latest):
+
+```sh
+version=0.1.0
+base="https://github.com/ARGibson/gigtime/releases/download/v$version"
+curl --fail --location --remote-name "$base/gigtime-$version-linux-x64.tar.gz"
+curl --fail --location --remote-name "$base/SHA256SUMS"
+sha256sum -c --ignore-missing SHA256SUMS
+tar -xzf "gigtime-$version-linux-x64.tar.gz"
+cd "gigtime-$version-linux-x64"
+./install.sh --from .
+```
+
+Choose the version shown on the release page. Upgrading uses the same steps with the
+newer archive. The bundled installer runs `gig setup`, switches the installed release,
+and checks health. Add `~/.local/bin` to `PATH` if it reports a warning.
+
+Requirements: Linux x64 with systemd user services, glibc **2.39 or newer**, and the
+**ASP.NET Core Runtime 10** (which includes the .NET runtime) for `gigtimed`. The native
+`gig` needs no .NET runtime. These binaries are built on `ubuntu-24.04`; its
+[published runner image SBOM](https://github.com/actions/runner-images/releases/tag/ubuntu24/20261012.334)
+lists glibc `2.39-0ubuntu8.9`. Alpine/musl is not supported by this archive.
+
+## Build from source
 
 From a checkout, first installs and upgrades use the same command:
 
