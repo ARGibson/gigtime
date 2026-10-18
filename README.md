@@ -77,8 +77,8 @@ The script builds a native `gig` and the service into `~/.local/lib/gigtime/rele
 checks the new binary, switches the relative `current` link atomically, and links
 `~/.local/bin/gig` to `current/gig`. It runs setup, requests a restart of an already-running
 service, and polls health for up to ten seconds. Add `~/.local/bin` to `PATH` if the script warns about it.
-A clean commit already installed is a no-op; `--force` still runs setup, restart and
-health checking. Existing release folders are never replaced: identical files reuse
+A clean commit already installed is a no-op; `--force` rebuilds or restages, then reruns
+setup, restart and health checking. Existing release folders are never replaced: identical files reuse
 the folder, while different files for an installed label get a UTC timestamp suffix.
 Uncommitted changes always get a commit-and-UTC-timestamp label. Commit labels use
 seven characters on both install paths. Three releases are retained for rollback,
