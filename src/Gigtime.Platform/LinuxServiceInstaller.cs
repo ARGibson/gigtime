@@ -15,8 +15,12 @@ public sealed class LinuxServiceInstaller(IPlatformPaths paths, Func<IReadOnlyLi
 		Directory.CreateDirectory(directory);
 		var socket = Path.Combine(paths.RuntimeDirectory, "gigtime", "gigtimed.sock");
 
+		// #28: WorkingDirectory takes a whole path; retain escapes without ExecStart's outer quotes.
+		var workingDirectory = Quote(Path.GetDirectoryName(executable)!)[1..^1];
+
 		var service = "[Unit]\nDescription=gigtime time tracking\n\n[Service]\nExecStart="
 			+ Quote(executable)
+			+ "\nWorkingDirectory=" + workingDirectory
 			+ "\nEnvironment=" + Quote("XDG_RUNTIME_DIR=" + paths.RuntimeDirectory)
 			+ "\nEnvironment=" + Quote("XDG_DATA_HOME=" + paths.DataDirectory)
 			+ "\nEnvironment=" + Quote("XDG_CONFIG_HOME=" + paths.ConfigDirectory) + "\n\n[Install]\nWantedBy=default.target\n";

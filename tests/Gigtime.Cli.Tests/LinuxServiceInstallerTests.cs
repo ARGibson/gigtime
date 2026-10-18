@@ -29,6 +29,7 @@ public sealed class LinuxServiceInstallerTests
 			var content = await File.ReadAllTextAsync(service, TestContext.Current.CancellationToken);
 			content.ShouldContain("bin %% space/gigtimed\"");
 			content.ShouldContain("data %%");
+			content.ShouldContain("WorkingDirectory=" + Path.Combine(root, "bin %% space") + "\n");
 			var stamp = File.GetLastWriteTimeUtc(service);
 			(await installer.InstallAsync(executable, TestContext.Current.CancellationToken)).Changed.ShouldBeFalse();
 			File.GetLastWriteTimeUtc(service).ShouldBe(stamp);

@@ -1,5 +1,8 @@
 using Gigtime.Contracts;
 using Gigtime.Contracts.Catalogue;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
 
@@ -7,6 +10,16 @@ namespace Gigtime.Server.Tests;
 
 public sealed class HostTests
 {
+	[Fact]
+	public async Task Host_configuration_file_providers_do_not_reload_on_change()
+	{
+		await using var app = await ServiceHost.StartAsync();
+		var configuration = (IConfigurationRoot)app.Host.Services.GetRequiredService<IConfiguration>();
+		var files = configuration.Providers.OfType<JsonConfigurationProvider>().ToArray();
+		files.ShouldNotBeEmpty();
+		files.ShouldAllBe(provider => !provider.Source.ReloadOnChange);
+	}
+
 	[Fact]
 	public async Task Static_host_serves_health_and_persisted_defaults()
 	{

@@ -34,6 +34,15 @@ public sealed class SetupCompletionTests(PublishedFixture published)
 		var content = await File.ReadAllTextAsync(service, TestContext.Current.CancellationToken);
 		content.ShouldContain("ExecStart=\"" + Path.Combine(published.Application, "gigtimed") + "\"");
 		content.ShouldContain(day.Environment["XDG_RUNTIME_DIR"]);
+		content.ShouldContain("WorkingDirectory=" + published.Application + "\n");
+
+		// #28: migrate a unit written before WorkingDirectory was emitted, then leave it unchanged.
+		await File.WriteAllTextAsync(service,
+			content.Replace("WorkingDirectory=" + published.Application + "\n", "", StringComparison.Ordinal),
+			TestContext.Current.CancellationToken);
+
+		(await day.SuccessAsync("setup")).GetProperty("changed").GetBoolean().ShouldBeTrue();
+		(await File.ReadAllTextAsync(service, TestContext.Current.CancellationToken)).ShouldBe(content);
 		var written = File.GetLastWriteTimeUtc(service);
 		var socket = installed.GetProperty("socket_unit").GetString()!;
 
