@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  # Temporary #26 dry run; remove after inspecting the release archive.
-  pull_request:
-    branches: [main]
   push:
     # Ignore unrelated tags; validate v-prefixed tags before CI.
     tags: ['v*']
