@@ -84,7 +84,7 @@ if [[ -z $source_dir ]]; then
 		clean_label=false
 	fi
 	if already_current; then
-		printf 'Already current: %s; nothing to do.\n' "$label"
+		printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
 		exit 0
 	fi
 else
@@ -137,7 +137,7 @@ if [[ -n $source_dir ]]; then
 	printf 'Staged published files from %s.\n' "$source_dir"
 else
 	# #22: native tooling cannot publish under a prefix containing '%'.
-	build_dir=$(mktemp -d /tmp/gigtime-build.XXXXXXXX)
+	build_dir=$(mktemp -d -t gigtime-build.XXXXXXXX)
 	build_log=$build_dir/build.log
 	setsid bash -c '
 		cd -- "$1" || exit "$?"
@@ -170,7 +170,7 @@ if [[ -n $source_dir ]]; then
 		clean_label=false
 	fi
 	if [[ $force == false && $clean_label == true && -d $root/current ]] && diff -qr -- "$stage" "$root/current/" >/dev/null; then
-		printf 'Already current: %s; nothing to do.\n' "$label"
+		printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
 		exit 0
 	fi
 	if [[ $force == false && -d $root/releases/$label ]] && ! diff -qr -- "$stage" "$root/releases/$label/" >/dev/null; then
@@ -179,6 +179,8 @@ if [[ -n $source_dir ]]; then
 	fi
 fi
 printf 'Release: %s.\n' "$label"
+
+previous_current=$(readlink -- "$root/current" || true)
 
 # Prepare both links before changing the live release. Never replace an unrelated file.
 ln -s -- "$root/current/gig" "$temporary_bin"
@@ -203,11 +205,14 @@ mv -Tf -- "$temporary_bin" "$bin_dir/gig"
 bin_link=false
 printf 'Switched current to %s.\n' "$label"
 
-# Keep current plus the newest two alternatives; current was just touched above.
+# #22: retain the last working selection even when it was an older rollback.
 kept=1
+if [[ $previous_current == releases/* && $previous_current != "releases/$label" && -d $root/$previous_current ]]; then
+	kept=2
+fi
 while IFS= read -r -d '' entry; do
 	old_label=${entry#* }
-	[[ $old_label != "$label" ]] || continue
+	[[ $old_label != "$label" && "releases/$old_label" != "$previous_current" ]] || continue
 	if (( kept < 3 )); then
 		kept=$((kept + 1))
 	else
@@ -220,7 +225,7 @@ printf 'Setup complete.\n'
 systemctl --user try-restart gigtimed.service
 printf 'Requested service restart.\n'
 # #22: setup probes allow 250 ms; socket activation needs several probes on a cold start.
-health_log=$(mktemp /tmp/gigtime-health.XXXXXXXX)
+health_log=$(mktemp -t gigtime-health.XXXXXXXX)
 if timeout 10s bash -c '
 	until "$1" setup --check >"$2" 2>&1; do sleep 0.25; done
 ' bash "$root/current/gig" "$health_log"; then

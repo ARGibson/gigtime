@@ -71,7 +71,7 @@ public sealed class InstallScriptTests(PublishedFixture published)
 	}
 
 	[Fact]
-	public async Task Custom_paths_and_pruning_keep_current_and_the_newest_two_alternatives()
+	public async Task Custom_paths_and_pruning_keep_current_previous_selection_and_newest_alternative()
 	{
 		await using var day = new DaySession(published);
 		await day.StartAsync();
@@ -112,6 +112,13 @@ public sealed class InstallScriptTests(PublishedFixture published)
 
 		version.ExitCode.ShouldBe(0, version.Error);
 		version.Output.Trim().ShouldBe("1.0.0+1000003");
+
+		var installed = await InstallAsync(day, Pair(day, "1000006"), "--prefix", root, "--bin-dir", bin);
+		installed.ExitCode.ShouldBe(0, installed.Output + installed.Error);
+		Directory.GetDirectories(Path.Combine(root, "releases")).Select(Path.GetFileName).Order()
+			.ShouldBe(["1000003", "1000005", "1000006"]);
+		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe("releases/1000006");
+		File.Exists(Path.Combine(root, "releases/1000003/gig")).ShouldBeTrue();
 	}
 
 	[Fact]
@@ -132,7 +139,7 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		File.Exists(Path.Combine(Root(day), "current/changed-file")).ShouldBeTrue();
 		var repeated = await InstallAsync(day, source);
 		repeated.ExitCode.ShouldBe(0, repeated.Output + repeated.Error);
-		repeated.Output.ShouldContain("nothing to do");
+		repeated.Output.ShouldContain($"Already current: {target}; nothing to do.");
 		new DirectoryInfo(Path.Combine(Root(day), "current")).LinkTarget.ShouldBe(target);
 	}
 
