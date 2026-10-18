@@ -22,7 +22,7 @@ public sealed class UnixSocketTests
 			RedirectStandardError = true,
 		};
 
-		start.ArgumentList.Add(typeof(Program).Assembly.Location);
+		start.ArgumentList.Add(ServerExecutable.Path);
 		start.Environment["XDG_DATA_HOME"] = Path.Combine(directory, "data");
 		start.Environment["XDG_RUNTIME_DIR"] = Path.Combine(directory, "runtime");
 		start.Environment["XDG_CONFIG_HOME"] = Path.Combine(directory, "config");

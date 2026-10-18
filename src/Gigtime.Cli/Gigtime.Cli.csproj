@@ -15,4 +15,7 @@
 		<PackageReference Include="Spectre.Console" />
 		<PackageReference Include="System.CommandLine" />
 	</ItemGroup>
+	<ItemGroup>
+		<EmbeddedResource Include="_gig" LogicalName="gig._gig" />
+	</ItemGroup>
 </Project>

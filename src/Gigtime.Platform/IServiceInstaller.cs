@@ -2,6 +2,7 @@ namespace Gigtime.Platform;
 
 public interface IServiceInstaller
 {
-	Task InstallAsync(CancellationToken cancellationToken = default);
-	Task UninstallAsync(CancellationToken cancellationToken = default);
+	Task<ServiceInstallation> InstallAsync(string executable, CancellationToken cancellationToken = default);
 }
+
+public sealed record ServiceInstallation(bool Changed, bool SocketActivation);

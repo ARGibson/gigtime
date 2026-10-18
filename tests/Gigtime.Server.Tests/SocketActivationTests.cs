@@ -38,7 +38,7 @@ public sealed class SocketActivationTests
 		}
 
 		start.ArgumentList.Add(FindExecutable("dotnet")!);
-		start.ArgumentList.Add(typeof(Program).Assembly.Location);
+		start.ArgumentList.Add(ServerExecutable.Path);
 		start.Environment.Remove("LISTEN_PID");
 		start.Environment.Remove("LISTEN_FDS");
 		using var process = Process.Start(start)!;
