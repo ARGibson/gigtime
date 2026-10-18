@@ -17,7 +17,14 @@ internal static class CommandOptions
 		command.Arguments.Add(new Argument<string?>(name)
 		{
 			Arity = optional ? ArgumentArity.ZeroOrOne : ArgumentArity.ExactlyOne,
-			Description = name == "task" ? "Select a task by id." : "Supply the " + name + " key.",
+			Description = name switch
+			{
+				"key" => "Supply the " + command.Parents.Single().Name + " key.",
+				"task" => "Select a task by id.",
+				"kind" => "Select clients, projects or tasks.",
+				"prefix" => "Filter by key or task id prefix.",
+				_ => "Supply the " + name + " key.",
+			},
 		});
 	}
 

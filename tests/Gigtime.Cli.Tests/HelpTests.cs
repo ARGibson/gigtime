@@ -1,13 +1,14 @@
 using System.CommandLine;
+using System.Text.RegularExpressions;
 using Shouldly;
 using Xunit;
 
 namespace Gigtime.Cli.Tests;
 
-public sealed class HelpTests
+public sealed partial class HelpTests
 {
 	[Fact]
-	public async Task Every_command_and_option_has_capitalized_help_with_consistent_punctuation()
+	public async Task Every_command_option_and_argument_has_capitalized_help_without_repeated_words()
 	{
 		using var output = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
 		var app = new CliApplication(output, TextWriter.Null, false, true, () => throw new InvalidOperationException());
@@ -17,6 +18,12 @@ public sealed class HelpTests
 		{
 			Description(command.Description, string.Join(' ', args));
 			foreach (var option in command.Options) Description(option.Description, string.Join(' ', args) + " " + option.Name);
+
+			foreach (var argument in command.Arguments)
+			{
+				Description(argument.Description, string.Join(' ', args) + " <" + argument.Name + ">");
+				if (argument.Name == "key") argument.Description.ShouldBe("Supply the " + args[0] + " key.");
+			}
 
 			if (command.Hidden) continue;
 
@@ -34,7 +41,11 @@ public sealed class HelpTests
 		description.ShouldNotBeNullOrWhiteSpace(name);
 		char.IsUpper(description[0]).ShouldBeTrue(name + ": " + description);
 		description.EndsWith('.').ShouldBeTrue(name);
+		RepeatedWord().IsMatch(description).ShouldBeFalse(name + ": " + description);
 	}
+
+	[GeneratedRegex(@"\b(\w+)\s+\1\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+	private static partial Regex RepeatedWord();
 
 	private static IEnumerable<(Command Command, string[] Args)> Commands(Command command, string[] args)
 	{
