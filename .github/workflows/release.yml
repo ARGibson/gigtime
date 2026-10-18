@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  # #7: temporary dry-run trigger; drop this commit before merge.
-  pull_request:
-    branches: [main]
   push:
     # Ignore unrelated tags; validate v-prefixed tags before CI.
     tags: ['v*']
