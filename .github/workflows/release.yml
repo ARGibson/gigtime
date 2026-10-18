@@ -5,8 +5,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    # Validate every tag before CI; only v<major>.<minor>.<patch> may build.
-    tags: ['**']
+    # Ignore unrelated tags; validate v-prefixed tags before CI.
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -86,7 +86,7 @@ jobs:
           cp README.md LICENSE "$RUNNER_TEMP/package/$name/"
           "$RUNNER_TEMP/package/$name/gig" --version
           epoch=$(git show -s --format=%ct HEAD)
-          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
+          tar --format=gnu --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
             -C "$RUNNER_TEMP/package" -cf - "$name" | gzip -n > "artifacts/release/$name.tar.gz"
           (cd artifacts/release && sha256sum "$name.tar.gz" > SHA256SUMS)
 

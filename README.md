@@ -59,7 +59,10 @@ and checks health. Add `~/.local/bin` to `PATH` if it reports a warning.
 
 Requirements: Linux x64 with systemd user services, glibc **2.39 or newer**, and the
 **ASP.NET Core Runtime 10** (which includes the .NET runtime) for `gigtimed`. The native
-`gig` needs no .NET runtime. These binaries are built on `ubuntu-24.04`; its
+`gig` needs no .NET runtime. The ASP.NET Core runtime must be discoverable by the
+systemd user unit: install it system-wide, or register its directory in
+`/etc/dotnet/install_location`. An unregistered `~/.dotnet` install without `DOTNET_ROOT` in the unit
+isn't found. These binaries are built on `ubuntu-24.04`; its
 [published runner image SBOM](https://github.com/actions/runner-images/releases/tag/ubuntu24/20261012.334)
 lists glibc `2.39-0ubuntu8.9`. Alpine/musl is not supported by this archive.
 

@@ -58,3 +58,27 @@ for arguments in missing invalid-current invalid-previous option-like; do
 	[[ $status == "$expected_status" ]] || { printf 'FAIL %s: exit %s\n' "$arguments" "$status" >&2; exit 1; }
 	printf 'ok %s\n' "$arguments"
 done
+
+# #7: merged branches contribute their reviewed title once, not their development commits.
+main_branch=$(git symbolic-ref --short HEAD)
+merge_base=$(git rev-parse HEAD)
+git checkout --quiet -b merged-topic
+commit 'fix: intermediate branch change'
+commit 'feat: another intermediate branch change'
+git checkout --quiet "$main_branch"
+git merge --quiet --no-ff merged-topic -m $'Merge pull request #42 from tests/merged-topic\n\nfeat(cli): ship the reviewed change\n\nRefs #7'
+expect $'## Features\n\n- feat(cli): ship the reviewed change (#42)' 'first-parent merge title, PR number and no branch noise' "$merge_base" HEAD
+
+# A squash has one parent; even if its source branch remains locally, only its public subject appears.
+squash_base=$(git rev-parse HEAD)
+git checkout --quiet -b squash-topic
+printf 'first step\n' > change
+git add change
+commit 'feat: private pre-squash step'
+printf 'second step\n' >> change
+git add change
+commit 'fix: private pre-squash repair'
+git checkout --quiet "$main_branch"
+git merge --quiet --squash squash-topic
+commit $'fix(cli): ship the squashed change (#43)\n\nRefs #7'
+expect $'## Fixes\n\n- fix(cli): ship the squashed change (#43)' 'pre-squash branch history stays out of published notes' "$squash_base" HEAD

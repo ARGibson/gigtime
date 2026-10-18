@@ -20,6 +20,14 @@ other=()
 while IFS= read -r commit; do
 	subject=$(git show -s --format=%s "$commit")
 	body=$(git show -s --format=%b "$commit")
+	parents=$(git show -s --format=%P "$commit")
+	if [[ $parents == *' '* && -n $body ]]; then
+		merge_subject=$subject
+		subject=${body%%$'\n'*}
+		if [[ $merge_subject =~ ^Merge\ pull\ request\ #([0-9]+) && $subject != *"(#${BASH_REMATCH[1]})" ]]; then
+			subject+=" (#${BASH_REMATCH[1]})"
+		fi
+	fi
 	if [[ $subject =~ ^[a-z]+(\([^\)]+\))?!: || $body =~ (^|$'\n')BREAKING[\ -]CHANGE: ]]; then
 		breaking+=("$subject")
 	elif [[ $subject =~ ^feat(\([^\)]+\))?: ]]; then
@@ -29,7 +37,7 @@ while IFS= read -r commit; do
 	else
 		other+=("$subject")
 	fi
-done < <(git rev-list --reverse "$range")
+done < <(git rev-list --first-parent --reverse "$range")
 
 section() {
 	local heading=$1
