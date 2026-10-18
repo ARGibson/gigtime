@@ -6,12 +6,12 @@ usage() {
 Usage: scripts/install.sh [--prefix DIR] [--bin-dir DIR] [--from DIR] [--instance NAME] [--force]
 
 Build and install gigtime on Linux, or upgrade the current installation.
-  --prefix DIR   Install root (default: $HOME/.local/lib/gigtime).
-  --bin-dir DIR  Directory for the gig link (default: $HOME/.local/bin).
-  --from DIR     Install an already-published gig and gigtimed directory.
+  --prefix DIR    Install root (default: $HOME/.local/lib/gigtime).
+  --bin-dir DIR   Directory for the gig link (default: $HOME/.local/bin).
+  --from DIR      Install an already-published gig and gigtimed directory.
   --instance NAME Install and restart the named instance (default: unnamed).
-  --force        Reinstall even when the clean label is already current.
-  --help         Show this help.
+  --force         Reinstall even when the clean label is already current.
+  --help          Show this help.
 HELP
 }
 
@@ -118,6 +118,41 @@ activate_install() {
 		health_log=''
 		exit "$status"
 	fi
+}
+
+# #30: every instance can keep an older release alive after current moves.
+declare -A active_releases=()
+collect_active_releases() {
+	active_releases=()
+	local process executable target relative name argument daemon
+	local -a arguments
+	for process in /proc/[0-9]*; do
+		[[ -O $process ]] || continue
+		executable=$(readlink -- "$process/exe" 2>/dev/null) || continue
+		executable=${executable%" (deleted)"}
+		case ${executable##*/} in
+			gigtimed) ;;
+			dotnet)
+				arguments=()
+				mapfile -d '' -t arguments 2>/dev/null < "$process/cmdline" || continue
+				daemon=false
+				for argument in "${arguments[@]}"; do
+					if [[ ${argument##*/} == gigtimed.dll ]]; then daemon=true; break; fi
+				done
+				[[ $daemon == true ]] || continue ;;
+			*) continue ;;
+		esac
+		for target in "$executable" "$(readlink -- "$process/cwd" 2>/dev/null || true)"; do
+			target=${target%" (deleted)"}
+			case $target in
+				"$release_root/"*)
+					relative=${target#"$release_root/"}
+					name=${relative%%/*}
+					[[ -n $name && $name != .* ]] || continue
+					active_releases["$name"]=1 ;;
+			esac
+		done
+	done
 }
 
 clean_label=true
@@ -240,6 +275,12 @@ if [[ -n $source_dir ]]; then
 fi
 printf 'Release: %s.\n' "$label"
 
+release=$root/releases/$label
+collect_active_releases
+if [[ ( -e $release || -L $release ) && ${active_releases[$label]-} == 1 ]]; then
+	fail "Cannot replace release '$label': a running gigtimed process uses it."
+fi
+
 previous_current=$(readlink -- "$root/current" || true)
 
 # Prepare both links before changing the live release. Never replace an unrelated file.
@@ -247,7 +288,6 @@ ln -s -- "$root/current/gig" "$temporary_bin"
 bin_link=true
 ln -s -- "releases/$label" "$temporary_current"
 current_link=true
-release=$root/releases/$label
 if [[ -e $release || -L $release ]]; then
 	candidate_backup=$root/releases/.backup-$$
 	[[ ! -e $candidate_backup && ! -L $candidate_backup ]] || fail "Backup path already exists: $candidate_backup"
@@ -265,6 +305,8 @@ mv -Tf -- "$temporary_bin" "$bin_dir/gig"
 bin_link=false
 printf 'Switched current to %s.\n' "$label"
 
+collect_active_releases
+
 # #22: retain the last working selection even when it was an older rollback.
 kept=1
 if [[ $previous_current == releases/* && $previous_current != "releases/$label" && -d $root/$previous_current ]]; then
@@ -273,6 +315,7 @@ fi
 while IFS= read -r -d '' entry; do
 	old_label=${entry#* }
 	[[ $old_label != "$label" && "releases/$old_label" != "$previous_current" ]] || continue
+	[[ ${active_releases[$old_label]-} != 1 ]] || continue
 	if (( kept < 3 )); then
 		kept=$((kept + 1))
 	else

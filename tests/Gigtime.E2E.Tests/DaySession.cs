@@ -49,15 +49,18 @@ internal sealed class DaySession : IAsyncDisposable
 
 	internal Task StartAsync() => StartAsync(published.Application);
 
-	internal async Task StartAsync(string workingDirectory)
+	internal Task StartAsync(string workingDirectory) => StartAsync(Path.Combine(published.Application, "gigtimed"), workingDirectory);
+
+	internal async Task StartAsync(string executable, string workingDirectory, params string[] arguments)
 	{
-		var start = new ProcessStartInfo(Path.Combine(published.Application, "gigtimed"))
+		var start = new ProcessStartInfo(executable)
 		{
 			WorkingDirectory = workingDirectory,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 		};
 
+		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		start.Environment.Remove("GIGTIME_INSTANCE");
 		foreach (var (key, value) in Environment) start.Environment[key] = value;
 		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");

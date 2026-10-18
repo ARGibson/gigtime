@@ -20,6 +20,8 @@ public sealed class GigtimeInstanceTests
 
 	[Theory]
 	[InlineData("Dev")]
+	[InlineData("dév")]
+	[InlineData("   ")]
 	[InlineData("1dev")]
 	[InlineData("-dev")]
 	[InlineData("a_b")]

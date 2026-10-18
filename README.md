@@ -166,7 +166,10 @@ in `$XDG_RUNTIME_DIR/gigtime-<name>/gigtimed.sock`. The private runtime fallback
 `bash scripts/install.sh --instance dev` installs shared binaries and sets up
 `gigtimed-dev.service` and `gigtimed-dev.socket`. The service remembers its instance.
 The script uses only `--instance`, ignoring inherited `GIGTIME_INSTANCE`; without
-the flag it installs the default instance. Subsequent commands select an instance:
+the flag it installs the default instance.
+A development build installed with `--instance` still moves the shared `current` and `gig` link, so use a separate `--prefix` and `--bin-dir` for development builds.
+
+Subsequent commands select an instance:
 
 ```sh
 GIGTIME_INSTANCE=dev gig status
