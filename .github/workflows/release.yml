@@ -1,6 +1,9 @@
 name: Release
 
 on:
+  # #7: temporary dry-run trigger; drop this commit before merge.
+  pull_request:
+    branches: [main]
   push:
     # Validate every tag before CI; only v<major>.<minor>.<patch> may build.
     tags: ['**']
