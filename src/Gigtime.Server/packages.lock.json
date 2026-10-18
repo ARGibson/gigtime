@@ -242,6 +242,13 @@
           "Spectre.Console.Ansi": "0.55.0"
         }
       }
+    },
+    "net10.0/linux-x64": {
+      "SourceGear.sqlite3": {
+        "type": "Transitive",
+        "resolved": "3.50.4.5",
+        "contentHash": "UtnipXhJYZKQOQIfpws/msLK7IRhMplE1CZCaZLIQXRnGD474QVpO/J9nMlQQY8NZueGz1aidjoxDRnrC1NT3Q=="
+      }
     }
   }
 }
