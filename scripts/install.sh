@@ -144,7 +144,7 @@ else
 		export ArtifactsPath="$2/artifacts" UseArtifactsOutput=true
 		dotnet restore --locked-mode || exit "$?"
 		dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore -o "$2/published" || exit "$?"
-		dotnet publish src/Gigtime.Server -c Release --no-restore -o "$2/published" || exit "$?"
+		dotnet publish src/Gigtime.Server -c Release -r linux-x64 --self-contained false --no-restore -o "$2/published" || exit "$?"
 	' bash "$repo" "$build_dir" >"$build_log" 2>&1 &
 	build_pid=$!
 	if ! wait "$build_pid"; then

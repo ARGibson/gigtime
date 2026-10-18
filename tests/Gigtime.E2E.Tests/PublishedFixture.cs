@@ -41,7 +41,8 @@ public sealed class PublishedFixture : IAsyncLifetime
 			[
 				"publish", "src/" + project, "-c", "Release", "--no-restore",
 				"-p:PublishAot=" + (cli ? "true" : "false"), "-warnaserror", "-p:ILLinkTreatWarningsAsErrors=true",
-				"-p:IlcTreatWarningsAsErrors=true", "-o", cli ? Path.Combine(Root, "cli") : Application
+				"-p:IlcTreatWarningsAsErrors=true", "-o", cli ? Path.Combine(Root, "cli") : Application,
+				.. cli ? Array.Empty<string>() : ["-r", "linux-x64", "--self-contained", "false"],
 			];
 
 			var result = await CommandProcess.RunAsync("dotnet", arguments, repository, environment, TimeSpan.FromMinutes(5));
