@@ -1,0 +1,163 @@
+name: Release
+
+on:
+  push:
+    # Ignore unrelated tags; validate v-prefixed tags before CI.
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Validate version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Validate tag or select dry-run version
+        id: version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [[ $EVENT_NAME == pull_request ]]; then
+            version="0.0.0-dryrun.$RUN_NUMBER"
+          elif [[ $REF_TYPE == tag && $REF_NAME =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            version=${REF_NAME#v}
+          else
+            printf 'Invalid release tag: %s; expected v<major>.<minor>.<patch>.\n' "$REF_NAME" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: CI gate
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build release archive
+    needs: [version, ci]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Build reproducible archive and checksums
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          CI: 'true'
+        run: |
+          set -euo pipefail
+          umask 022
+          export ArtifactsPath="$RUNNER_TEMP/build" UseArtifactsOutput=true
+          # #7: generated file-local type names hash their paths; normalize scratch across builds.
+          export PathMap="$RUNNER_TEMP/=/_/temp/"
+          dotnet restore --locked-mode
+          # #7: the same command as ci.yml. With --no-restore the runner fails (PrivateSdkAssemblies is required).
+          dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true \
+            -p:Version="$VERSION" \
+            -warnaserror -p:ILLinkTreatWarningsAsErrors=true -p:IlcTreatWarningsAsErrors=true -o "$RUNNER_TEMP/cli"
+          name="gigtime-$VERSION-linux-x64"
+          mkdir -p "$RUNNER_TEMP/package/$name" artifacts/release
+          # The ubuntu-24.04 x64 host produces a linux-x64 apphost; dependencies stay framework-dependent.
+          dotnet publish src/Gigtime.Server -c Release --self-contained false --no-restore \
+            -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -warnaserror \
+            -o "$RUNNER_TEMP/package/$name"
+          cp "$RUNNER_TEMP/cli/gig" "$RUNNER_TEMP/package/$name/gig"
+          cp scripts/install.sh "$RUNNER_TEMP/package/$name/install.sh"
+          cp README.md LICENSE "$RUNNER_TEMP/package/$name/"
+          "$RUNNER_TEMP/package/$name/gig" --version
+          epoch=$(git show -s --format=%ct HEAD)
+          tar --format=gnu --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" \
+            -C "$RUNNER_TEMP/package" -cf - "$name" | gzip -n > "artifacts/release/$name.tar.gz"
+          (cd artifacts/release && sha256sum "$name.tar.gz" > SHA256SUMS)
+
+      - name: Generate release notes
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          previous=''
+          while IFS= read -r candidate; do
+            if [[ $candidate != "$REF_NAME" && $candidate =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              previous=$candidate
+              break
+            fi
+          done < <(git tag --merged HEAD --sort=-version:refname)
+          bash scripts/release-notes.sh "$previous" HEAD > artifacts/release/release-notes.md
+
+      - name: Upload release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files
+          path: artifacts/release/
+          if-no-files-found: error
+
+  attest:
+    name: Attest archive
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: artifacts/release
+
+      - name: Verify archive checksum
+        working-directory: artifacts/release
+        run: sha256sum -c SHA256SUMS
+
+      - name: Attest archive provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: artifacts/release/gigtime-*-linux-x64.tar.gz
+
+  release:
+    name: Publish GitHub Release
+    needs: [version, build, attest]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: artifacts/release
+
+      - name: Verify archive checksum
+        working-directory: artifacts/release
+        run: sha256sum -c SHA256SUMS
+
+      - name: Publish existing tag with notes and assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$TAG" --verify-tag --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+            --notes-file artifacts/release/release-notes.md \
+            "artifacts/release/gigtime-$VERSION-linux-x64.tar.gz" artifacts/release/SHA256SUMS
