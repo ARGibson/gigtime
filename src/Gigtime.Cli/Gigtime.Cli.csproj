@@ -16,6 +16,10 @@
 		<PackageReference Include="System.CommandLine" />
 	</ItemGroup>
 	<ItemGroup>
+		<!-- #26: a RID-less restore never downloads the NativeAOT runtime pack, so fetch it here. -->
+		<PackageDownload Include="Microsoft.NETCore.App.Runtime.NativeAOT.linux-x64" Version="[$(BundledNETCoreAppPackageVersion)]" />
+	</ItemGroup>
+	<ItemGroup>
 		<EmbeddedResource Include="_gig" LogicalName="gig._gig" />
 	</ItemGroup>
 </Project>
