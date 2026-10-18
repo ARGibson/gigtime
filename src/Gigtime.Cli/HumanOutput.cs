@@ -10,9 +10,11 @@ namespace Gigtime.Cli;
 internal sealed class HumanOutput
 {
 	private readonly IAnsiConsole console;
+	private readonly DateTimeOffset now;
 
-	internal HumanOutput(TextWriter output, bool isTerminal, bool noColor)
+	internal HumanOutput(TextWriter output, bool isTerminal, bool noColor, DateTimeOffset utcNow)
 	{
+		now = utcNow;
 		var color = isTerminal && !noColor;
 
 		console = AnsiConsole.Create(new AnsiConsoleSettings
@@ -73,12 +75,7 @@ internal sealed class HumanOutput
 
 				break;
 			case TasksDto tasks:
-				Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
-					tasks.Tasks.Select(t => new[]
-					{
-						t.Id, t.Client.Key, t.Project.Key, t.Ref ?? "", t.State, DurationText.Format(t.RawSeconds),
-						DurationText.Format(t.RoundedSeconds),
-					}));
+				Log(tasks.Tasks);
 
 				break;
 			case AcknowledgementDto acknowledgement:
@@ -123,6 +120,9 @@ internal sealed class HumanOutput
 
 	private void Task(TaskDto task)
 	{
+		var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+		console.WriteLine("Times in " + task.Timezone);
+
 		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
 		[
 			new[]
@@ -132,14 +132,50 @@ internal sealed class HumanOutput
 			}
 		]);
 
-		var stopped = task.StoppedAt is null ? "open" : Instant(task.StoppedAt);
-		console.WriteLine("Started: " + Instant(task.StartedAt) + "  Stopped: " + stopped);
+		var stopped = task.StoppedAt is null ? "open" : Instant(task.StoppedAt, zone);
+		console.WriteLine("Started: " + Instant(task.StartedAt, zone) + "  Stopped: " + stopped);
 
-		Table(["Interval", "Start (UTC)", "End (UTC)"],
-			task.Intervals.Select(i => new[] { i.Number.ToString(CultureInfo.InvariantCulture), Instant(i.Start), Instant(i.End), }));
+		Table(["Interval", "Start", "End"],
+			task.Intervals.Select(i => new[] { i.Number.ToString(CultureInfo.InvariantCulture), Instant(i.Start, zone), Instant(i.End, zone), }));
 	}
 
-	private static string Instant(DateTimeOffset? instant) => instant?.ToString("O", CultureInfo.InvariantCulture) ?? "running";
+	private void Log(IReadOnlyList<TaskDto> tasks)
+	{
+		string[] headings = ["Id", "Client", "Project", "Ref", "State", "Started", "Stopped", "Raw", "Rounded"];
+		var rows = new List<string[]>();
+		string? timezone = null;
+
+		foreach (var task in tasks)
+		{
+			if (task.Timezone != timezone)
+			{
+				if (rows.Count > 0) Table(headings, rows);
+				rows.Clear();
+				timezone = task.Timezone;
+				console.WriteLine("Times in " + timezone);
+			}
+
+			var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+
+			rows.Add([
+				task.Id, task.Client.Key, task.Project.Key, task.Ref ?? "", task.State,
+				Instant(task.StartedAt, zone), task.StoppedAt is null ? "open" : Instant(task.StoppedAt, zone),
+				DurationText.Format(task.RawSeconds), DurationText.Format(task.RoundedSeconds)
+			]);
+		}
+
+		Table(headings, rows);
+	}
+
+	private string Instant(DateTimeOffset? instant, TimeZoneInfo zone)
+	{
+		if (instant is null) return "running";
+
+		var local = TimeZoneInfo.ConvertTime(instant.Value, zone);
+		var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+
+		return local.ToString(local.Date == today ? "HH:mm" : "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+	}
 
 	private void Table(string[] headings, IEnumerable<string[]> rows)
 	{

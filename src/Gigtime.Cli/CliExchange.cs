@@ -14,7 +14,8 @@ internal sealed class CliExchange(
 	bool isTerminal,
 	bool noColor,
 	Func<IPlatformPaths> paths,
-	Option<bool> json)
+	Option<bool> json,
+	TimeProvider clock)
 {
 	internal Task<int> GetAsync<T>(ParseResult parsed,
 		string command,
@@ -144,7 +145,7 @@ internal sealed class CliExchange(
 			}
 			else if (envelope.Ok)
 			{
-				new HumanOutput(output, isTerminal, noColor).Write(envelope.Data!, envelope.Command);
+				new HumanOutput(output, isTerminal, noColor, clock.GetUtcNow()).Write(envelope.Data!, envelope.Command);
 			}
 			else
 			{

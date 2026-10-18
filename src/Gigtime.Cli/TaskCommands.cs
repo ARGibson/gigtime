@@ -26,7 +26,7 @@ internal static class TaskCommands
 
 		foreach (var name in new[] { "pause", "resume", "stop" })
 		{
-			var command = Add(root, name, name + " the open task.");
+			var command = Add(root, name, char.ToUpperInvariant(name[0]) + name[1..] + " the open task.");
 
 			command.SetAction((r, ct) => exchange.SendAsync(r,
 				name,
@@ -43,7 +43,8 @@ internal static class TaskCommands
 
 		var last = new Option<int?>("--last")
 		{
-			Arity = ArgumentArity.ExactlyOne
+			Arity = ArgumentArity.ExactlyOne,
+			Description = "Limit the number of recent tasks."
 		};
 
 		log.Options.Add(last);
