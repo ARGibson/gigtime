@@ -58,7 +58,8 @@ internal sealed class CliExchange(
 
 		try
 		{
-			socketPath = Path.Combine(paths().RuntimeDirectory, "gigtime", "gigtimed.sock");
+			var p = paths();
+			socketPath = p.Instance.SocketPath(p);
 		}
 		catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
 		{

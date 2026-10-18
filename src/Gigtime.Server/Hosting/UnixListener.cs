@@ -15,8 +15,7 @@ public static class UnixListener
 			if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("gigtimed requires Unix sockets.");
 
 			var paths = options.ApplicationServices.GetRequiredService<IPlatformPaths>();
-			var directory = Path.Combine(paths.RuntimeDirectory, "gigtime");
-			var path = Path.Combine(directory, "gigtimed.sock");
+			var path = paths.Instance.SocketPath(paths);
 			// #2: environment/configured TCP endpoints cannot widen the daemon's Unix-only listener.
 			options.Configure(new ConfigurationBuilder().Build());
 
@@ -49,7 +48,7 @@ public static class UnixListener
 			if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("gigtimed requires Unix sockets.");
 
 			var paths = app.Services.GetRequiredService<IPlatformPaths>();
-			var socket = Path.Combine(paths.RuntimeDirectory, "gigtime", "gigtimed.sock");
+			var socket = paths.Instance.SocketPath(paths);
 			if (File.Exists(socket)) File.SetUnixFileMode(socket, UnixFileMode.UserRead | UnixFileMode.UserWrite);
 		});
 	}

@@ -77,6 +77,16 @@ public sealed partial class ReadmeTests
 	}
 
 	[Fact]
+	public void Status_and_setup_json_include_explicit_instance_even_for_default()
+	{
+		var status = System.Text.Json.JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(null)),
+			GigtimeJsonContext.Default.StatusResponse);
+
+		status.ShouldContain("\"instance\":null");
+		GigtimeJsonContext.Default.GetTypeInfo(typeof(SetupDto))!.Properties.Select(p => p.Name).ShouldContain("instance");
+	}
+
+	[Fact]
 	public void Readme_server_install_uses_the_fixture_framework_dependent_publish_for_linux_x64()
 	{
 		var command = Readme().Split('\n').Single(line => line.StartsWith("dotnet publish src/Gigtime.Server ", StringComparison.Ordinal));

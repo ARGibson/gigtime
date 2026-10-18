@@ -3,14 +3,15 @@ set -euo pipefail
 
 usage() {
 	cat <<'HELP'
-Usage: scripts/install.sh [--prefix DIR] [--bin-dir DIR] [--from DIR] [--force]
+Usage: scripts/install.sh [--prefix DIR] [--bin-dir DIR] [--from DIR] [--instance NAME] [--force]
 
 Build and install gigtime on Linux, or upgrade the current installation.
-  --prefix DIR   Install root (default: $HOME/.local/lib/gigtime).
-  --bin-dir DIR  Directory for the gig link (default: $HOME/.local/bin).
-  --from DIR     Install an already-published gig and gigtimed directory.
-  --force        Reinstall even when the clean label is already current.
-  --help         Show this help.
+  --prefix DIR    Install root (default: $HOME/.local/lib/gigtime).
+  --bin-dir DIR   Directory for the gig link (default: $HOME/.local/bin).
+  --from DIR      Install an already-published gig and gigtimed directory.
+  --instance NAME Install and restart the named instance (default: unnamed).
+  --force         Run setup, restart and health even when already current.
+  --help          Show this help.
 HELP
 }
 
@@ -19,9 +20,16 @@ fail() {
 	exit 1
 }
 
+valid_instance() {
+	# #30: instance names are ASCII regardless of the caller's locale.
+	local LC_ALL=C
+	[[ $1 =~ ^[a-z][a-z0-9-]{0,31}$ ]]
+}
+
 prefix=${HOME:?HOME is required}/.local/lib/gigtime
 bin_dir=$HOME/.local/bin
 source_dir=''
+instance=''
 force=false
 while (( $# )); do
 	case $1 in
@@ -36,26 +44,43 @@ while (( $# )); do
 				--from) source_dir=$2 ;;
 			esac
 			shift 2 ;;
+		--instance)
+			if (( $# < 2 )) || ! valid_instance "$2"; then
+				printf 'install: --instance requires a name matching ^[a-z][a-z0-9-]{0,31}$.\n' >&2
+				exit 2
+			fi
+			instance=$2
+			shift 2 ;;
 		--force) force=true; shift ;;
 		--help) usage; exit 0 ;;
 		*) printf 'install: unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
 	esac
 done
 
+# #30: only the explicit flag may select the instance, including for version checks.
+unset GIGTIME_INSTANCE
+unit=gigtimed.service
+data_directory=gigtime
+if [[ -n $instance ]]; then
+	export GIGTIME_INSTANCE=$instance
+	unit=gigtimed-$instance.service
+	data_directory=gigtime-$instance
+fi
+
 [[ $(uname -s) == Linux ]] || fail 'Linux is required.'
 root=$(realpath -m -- "$prefix")
 bin_dir=$(realpath -m -- "$bin_dir")
 data_home=${XDG_DATA_HOME:-}
 [[ $data_home == /* ]] || data_home=$HOME/.local/share
-data_home=$(realpath -m -- "$data_home/gigtime")
+data_home=$(realpath -m -- "$data_home/$data_directory")
 release_root=$(realpath -m -- "$root/releases")
 for directory in "$root" "$bin_dir" "$release_root"; do
 	case "$directory/" in
-		"$data_home/"*) fail "Install paths cannot be inside the gigtime data directory (\$XDG_DATA_HOME/gigtime): $directory" ;;
+		"$data_home/"*) fail "Install paths cannot be inside the gigtime data directory (\$XDG_DATA_HOME/$data_directory): $directory" ;;
 	esac
 done
 case "$data_home/" in
-	"$release_root/"*) fail "The gigtime data directory (\$XDG_DATA_HOME/gigtime) cannot be inside releases: $data_home" ;;
+	"$release_root/"*) fail "The gigtime data directory (\$XDG_DATA_HOME/$data_directory) cannot be inside releases: $data_home" ;;
 esac
 [[ $root != / ]] || fail 'The install root cannot be /.'
 case $root in
@@ -69,6 +94,90 @@ case :${PATH:-}: in
 esac
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+health_log=''
+activate_install() {
+	"$root/current/gig" setup --gigtimed "$root/current/gigtimed"
+	printf 'Setup complete.\n'
+	systemctl --user try-restart "$unit"
+	printf 'Requested service restart.\n'
+	# #22: setup probes allow 250 ms; socket activation needs several probes on a cold start.
+	health_log=$(mktemp -t gigtime-health.XXXXXXXX)
+	if timeout 10s bash -c '
+		until "$1" setup --check >"$2" 2>&1; do sleep 0.25; done
+	' bash "$root/current/gig" "$health_log"; then
+		cat -- "$health_log"
+		rm -f -- "$health_log"
+		health_log=''
+		printf 'Health check passed.\n'
+	else
+		status=$?
+		[[ $status != 124 ]] || status=6
+		cat -- "$health_log" >&2
+		printf 'Health check failed; current remains %s.\n' "$label" >&2
+		rm -f -- "$health_log"
+		health_log=''
+		exit "$status"
+	fi
+}
+
+# #30: every instance can keep an older release alive after current moves.
+declare -A active_releases=()
+collect_active_releases() {
+	active_releases=()
+	local process executable target relative name argument daemon working_directory dll
+	local map_address map_permissions map_offset map_device map_inode mapped_path
+	local -a arguments targets
+	for process in /proc/[0-9]*; do
+		[[ -O $process ]] || continue
+		executable=$(readlink -- "$process/exe" 2>/dev/null) || continue
+		executable=${executable%" (deleted)"}
+		case ${executable##*/} in
+			gigtimed|dotnet) ;;
+			*) continue ;;
+		esac
+		working_directory=$(readlink -- "$process/cwd" 2>/dev/null || true)
+		working_directory=${working_directory%" (deleted)"}
+		targets=("$executable" "$working_directory")
+		case ${executable##*/} in
+			gigtimed) ;;
+			dotnet)
+				arguments=()
+				mapfile -d '' -t arguments 2>/dev/null < "$process/cmdline" || continue
+				daemon=false
+				for argument in "${arguments[@]}"; do
+					if [[ ${argument##*/} == gigtimed.dll ]]; then
+						daemon=true
+						dll=''
+						if [[ $argument == /* ]]; then
+							dll=$(realpath -e -- "$argument" 2>/dev/null || true)
+						elif [[ -n $working_directory ]]; then
+							dll=$(realpath -e -- "$working_directory/$argument" 2>/dev/null || true)
+						fi
+						[[ -z $dll ]] || targets+=("$dll")
+						break
+					fi
+				done
+				[[ $daemon == true ]] || continue
+				# #30: a current symlink can move after launch; mappings retain the loaded DLL's path.
+				while read -r map_address map_permissions map_offset map_device map_inode mapped_path; do
+					mapped_path=${mapped_path%" (deleted)"}
+					if [[ ${mapped_path##*/} == gigtimed.dll ]]; then targets+=("$mapped_path"); fi
+				done 2>/dev/null < "$process/maps" || true ;;
+			*) continue ;;
+		esac
+		for target in "${targets[@]}"; do
+			target=${target%" (deleted)"}
+			case $target in
+				"$release_root/"*)
+					relative=${target#"$release_root/"}
+					name=${relative%%/*}
+					[[ -n $name && $name != .* ]] || continue
+					active_releases["$name"]=1 ;;
+			esac
+		done
+	done
+}
+
 clean_label=true
 label=''
 already_current() {
@@ -84,7 +193,12 @@ if [[ -z $source_dir ]]; then
 		clean_label=false
 	fi
 	if already_current; then
-		printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
+		if [[ -n $instance ]]; then
+			printf 'Binaries already current: %s; configuring instance %s.\n' "$(readlink -- "$root/current")" "$instance"
+			activate_install
+		else
+			printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
+		fi
 		exit 0
 	fi
 else
@@ -95,7 +209,6 @@ fi
 mkdir -p -- "$root/releases" "$bin_dir"
 stage=$root/releases/.staging-$$
 release=''
-backup=''
 temporary_current=$root/.current-$$
 temporary_bin=$bin_dir/.gig-$$
 staged=false
@@ -105,7 +218,6 @@ installed=false
 switched=false
 build_pid=''
 build_dir=''
-health_log=''
 cleanup() {
 	local status=$?
 	trap - EXIT
@@ -117,9 +229,6 @@ cleanup() {
 	if [[ -n $health_log ]]; then rm -f -- "$health_log"; fi
 	if [[ $switched == false ]]; then
 		if [[ $installed == true ]]; then rm -rf -- "$release"; fi
-		if [[ -n $backup ]]; then mv -T -- "$backup" "$release"; fi
-	elif [[ -n $backup ]]; then
-		rm -rf -- "$backup"
 	fi
 	if [[ $staged == true ]]; then rm -rf -- "$stage"; fi
 	if [[ $current_link == true ]]; then rm -f -- "$temporary_current"; fi
@@ -170,12 +279,31 @@ if [[ -n $source_dir ]]; then
 		clean_label=false
 	fi
 	if [[ $force == false && $clean_label == true && -d $root/current ]] && diff -qr -- "$stage" "$root/current/" >/dev/null; then
-		printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
+		if [[ -n $instance ]]; then
+			printf 'Binaries already current: %s; configuring instance %s.\n' "$(readlink -- "$root/current")" "$instance"
+			activate_install
+		else
+			printf 'Already current: %s; nothing to do.\n' "$(readlink -- "$root/current")"
+		fi
 		exit 0
 	fi
-	if [[ $force == false && -d $root/releases/$label ]] && ! diff -qr -- "$stage" "$root/releases/$label/" >/dev/null; then
+fi
+# #30: release folders are immutable, including forced installs and rollbacks.
+release=$root/releases/$label
+reuse=false
+if [[ -e $release || -L $release ]]; then
+	if [[ -d $release ]] && diff -qr -- "$stage" "$release/" >/dev/null; then
+		reuse=true
+	else
 		label="$label-$(date -u +%Y%m%d%H%M%S)"
-		[[ ! -e $root/releases/$label ]] || fail "Release label already exists: $label; retry in a second."
+		release=$root/releases/$label
+		if [[ -e $release || -L $release ]]; then
+			if [[ -d $release ]] && diff -qr -- "$stage" "$release/" >/dev/null; then
+				reuse=true
+			else
+				fail "Release label already exists: $label; retry in a second."
+			fi
+		fi
 	fi
 fi
 printf 'Release: %s.\n' "$label"
@@ -187,23 +315,25 @@ ln -s -- "$root/current/gig" "$temporary_bin"
 bin_link=true
 ln -s -- "releases/$label" "$temporary_current"
 current_link=true
-release=$root/releases/$label
-if [[ -e $release || -L $release ]]; then
-	candidate_backup=$root/releases/.backup-$$
-	[[ ! -e $candidate_backup && ! -L $candidate_backup ]] || fail "Backup path already exists: $candidate_backup"
-	mv -T -- "$release" "$candidate_backup"
-	backup=$candidate_backup
+if [[ $reuse == true ]]; then
+	rm -rf -- "$stage"
+	staged=false
+else
+	# Do not overwrite a folder created by another installer since the comparison.
+	mv -T -n -- "$stage" "$release"
+	[[ ! -e $stage ]] || fail "Release label already exists: $label; retry in a second."
+	staged=false
+	installed=true
+	touch -- "$release"
 fi
-mv -T -- "$stage" "$release"
-staged=false
-installed=true
-touch -- "$release"
 mv -Tf -- "$temporary_current" "$root/current"
 current_link=false
 switched=true
 mv -Tf -- "$temporary_bin" "$bin_dir/gig"
 bin_link=false
 printf 'Switched current to %s.\n' "$label"
+
+collect_active_releases
 
 # #22: retain the last working selection even when it was an older rollback.
 kept=1
@@ -213,6 +343,7 @@ fi
 while IFS= read -r -d '' entry; do
 	old_label=${entry#* }
 	[[ $old_label != "$label" && "releases/$old_label" != "$previous_current" ]] || continue
+	[[ ${active_releases[$old_label]-} != 1 ]] || continue
 	if (( kept < 3 )); then
 		kept=$((kept + 1))
 	else
@@ -220,21 +351,4 @@ while IFS= read -r -d '' entry; do
 	fi
 done < <(find "$root/releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %f\0' | sort -z -nr)
 
-"$root/current/gig" setup --gigtimed "$root/current/gigtimed"
-printf 'Setup complete.\n'
-systemctl --user try-restart gigtimed.service
-printf 'Requested service restart.\n'
-# #22: setup probes allow 250 ms; socket activation needs several probes on a cold start.
-health_log=$(mktemp -t gigtime-health.XXXXXXXX)
-if timeout 10s bash -c '
-	until "$1" setup --check >"$2" 2>&1; do sleep 0.25; done
-' bash "$root/current/gig" "$health_log"; then
-	cat -- "$health_log"
-	printf 'Health check passed.\n'
-else
-	status=$?
-	[[ $status != 124 ]] || status=6
-	cat -- "$health_log" >&2
-	printf 'Health check failed; current remains %s.\n' "$label" >&2
-	exit "$status"
-fi
+activate_install

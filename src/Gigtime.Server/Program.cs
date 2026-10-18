@@ -5,6 +5,17 @@ using JasperFx.CodeGeneration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wolverine;
 
+try
+{
+	GigtimeInstance.FromEnvironment();
+}
+catch (ArgumentException exception)
+{
+	Console.Error.WriteLine("config: " + exception.Message);
+
+	return 5;
+}
+
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
 	// #28: disable configuration file watchers before host defaults create their providers.

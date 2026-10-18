@@ -39,6 +39,7 @@ public sealed class SocketActivationTests
 
 		start.ArgumentList.Add(FindExecutable("dotnet")!);
 		start.ArgumentList.Add(ServerExecutable.Path);
+		start.Environment.Remove("GIGTIME_INSTANCE");
 		start.Environment.Remove("LISTEN_PID");
 		start.Environment.Remove("LISTEN_FDS");
 		using var process = Process.Start(start)!;

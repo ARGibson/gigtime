@@ -26,7 +26,9 @@ internal static class SetupCommands
 			try
 			{
 				var p = paths();
-				var installation = new ServiceInstallation(false, File.Exists(Path.Combine(p.ConfigDirectory, "systemd/user/gigtimed.socket")));
+
+				var installation =
+					new ServiceInstallation(false, File.Exists(Path.Combine(p.ConfigDirectory, "systemd/user", p.Instance.SocketUnit)));
 
 				if (!r.GetValue<bool>("--check"))
 				{
@@ -46,9 +48,9 @@ internal static class SetupCommands
 					installation = await installers(p).InstallAsync(daemon, ct);
 				}
 
-				var socket = Path.Combine(p.RuntimeDirectory, "gigtime", "gigtimed.sock");
-				var serviceUnit = Path.Combine(p.ConfigDirectory, "systemd/user/gigtimed.service");
-				var socketUnit = Path.Combine(p.ConfigDirectory, "systemd/user/gigtimed.socket");
+				var socket = p.Instance.SocketPath(p);
+				var serviceUnit = Path.Combine(p.ConfigDirectory, "systemd/user", p.Instance.ServiceUnit);
+				var socketUnit = Path.Combine(p.ConfigDirectory, "systemd/user", p.Instance.SocketUnit);
 
 				var data = new SetupDto(serviceUnit,
 					File.Exists(serviceUnit),
@@ -56,10 +58,11 @@ internal static class SetupCommands
 					File.Exists(socketUnit),
 					socket,
 					Path.Exists(socket),
-					Path.Combine(p.DataDirectory, "gigtime/gigtime.db"),
+					p.Instance.DatabasePath(p),
 					await HealthyAsync(socket, ct),
 					installation.Changed,
-					installation.SocketActivation);
+					installation.SocketActivation,
+					p.Instance.Name);
 
 				if (r.GetValue(json))
 				{
@@ -67,6 +70,7 @@ internal static class SetupCommands
 				}
 				else
 				{
+					if (p.Instance.Name is { } name) output.WriteLine("Instance: " + name);
 					output.WriteLine($"Service unit: {data.ServiceUnit} ({(data.ServiceInstalled ? "installed" : "missing")})");
 					output.WriteLine($"Socket unit: {data.SocketUnit} ({(data.SocketInstalled ? "installed" : "missing")})");
 					output.WriteLine($"Socket: {data.SocketPath} ({(data.SocketExists ? "present" : "absent")})");

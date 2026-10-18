@@ -8,7 +8,7 @@ public sealed class SocketDirectory(IPlatformPaths paths) : IHostedService
 	{
 		if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("gigtimed requires Unix sockets.");
 
-		var directory = Path.Combine(paths.RuntimeDirectory, "gigtime");
+		var directory = paths.Instance.RuntimePath(paths);
 		Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 		File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 

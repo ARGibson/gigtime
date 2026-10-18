@@ -19,9 +19,9 @@ public static class StoreRegistration
 				if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("gigtimed requires Unix sockets.");
 
 				var paths = provider.GetRequiredService<IPlatformPaths>();
-				var directory = Path.Combine(paths.DataDirectory, "gigtime");
+				var directory = paths.Instance.DataPath(paths);
 				Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-				var file = Path.Combine(directory, "gigtime.db");
+				var file = paths.Instance.DatabasePath(paths);
 
 				using (File.Open(file,
 								new FileStreamOptions

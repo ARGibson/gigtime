@@ -35,6 +35,8 @@ internal sealed class HumanOutput
 
 	internal void Write(object data, string command)
 	{
+		if (data is StatusDto { Instance: { } instance }) console.WriteLine("Instance: " + instance);
+
 		switch (data)
 		{
 			case ReportDto report:

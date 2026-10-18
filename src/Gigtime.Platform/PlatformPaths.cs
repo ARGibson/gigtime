@@ -2,6 +2,7 @@ namespace Gigtime.Platform;
 
 public interface IPlatformPaths
 {
+	GigtimeInstance Instance => GigtimeInstance.Default;
 	string DataDirectory { get; }
 	string RuntimeDirectory { get; }
 	string ConfigDirectory { get; }
@@ -9,6 +10,7 @@ public interface IPlatformPaths
 
 public sealed class LinuxPlatformPaths : IPlatformPaths
 {
+	public GigtimeInstance Instance { get; }
 	public string DataDirectory { get; }
 	public string RuntimeDirectory { get; }
 	public string ConfigDirectory { get; }
@@ -20,7 +22,8 @@ public sealed class LinuxPlatformPaths : IPlatformPaths
 		Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
 		Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
 		Path.GetTempPath(),
-		createRuntimeDirectory)
+		createRuntimeDirectory,
+		GigtimeInstance.FromEnvironment())
 	{ }
 
 	internal LinuxPlatformPaths(string? data,
@@ -28,12 +31,14 @@ public sealed class LinuxPlatformPaths : IPlatformPaths
 		string? config,
 		string home,
 		string temporary,
-		bool createRuntimeDirectory = true)
+		bool createRuntimeDirectory = true,
+		GigtimeInstance? instance = null)
 	{
+		Instance = instance ?? GigtimeInstance.Default;
 		DataDirectory = Root(data, Path.Combine(home, ".local", "share"));
 
 		RuntimeDirectory =
-			LinuxRuntimeDirectory.Resolve(runtime, Path.Combine(temporary, $"gigtime-{Environment.UserName}"), createRuntimeDirectory);
+			LinuxRuntimeDirectory.Resolve(runtime, Instance.RuntimeFallback(temporary), createRuntimeDirectory);
 
 		ConfigDirectory = Root(config, Path.Combine(home, ".config"));
 	}

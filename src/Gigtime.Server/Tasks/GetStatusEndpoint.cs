@@ -1,5 +1,6 @@
 using Gigtime.Contracts.Tasks;
 using Gigtime.Domain.Tasks;
+using Gigtime.Platform;
 using JasperFx.Events.Documents;
 
 namespace Gigtime.Server.Tasks;
@@ -16,8 +17,9 @@ public static class GetStatusEndpoint
 	}
 
 	[WolverineGet("/v1/status")]
-	public static Envelope<StatusDto> Handle([NotBody] LoadedTaskRead loaded, DateTimeOffset now)
+	public static Envelope<StatusDto> Handle([NotBody] LoadedTaskRead loaded, DateTimeOffset now, IPlatformPaths paths)
 	{
-		return Envelopes.Success("status", new StatusDto(loaded.Task is { } task ? TaskResponses.From(task, loaded.Catalogue, now) : null));
+		return Envelopes.Success("status",
+			new StatusDto(loaded.Task is { } task ? TaskResponses.From(task, loaded.Catalogue, now) : null, paths.Instance.Name));
 	}
 }

@@ -23,6 +23,8 @@ public sealed class CodegenTests
 		start.ArgumentList.Add("codegen");
 		start.ArgumentList.Add("write");
 
+		start.Environment.Remove("GIGTIME_INSTANCE");
+
 		foreach (var (key, leaf) in new[] { ("XDG_DATA_HOME", "data"), ("XDG_RUNTIME_DIR", "runtime"), ("XDG_CONFIG_HOME", "config") })
 			start.Environment[key] = Path.Combine(directory, leaf);
 

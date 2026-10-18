@@ -77,11 +77,13 @@ The script builds a native `gig` and the service into `~/.local/lib/gigtime/rele
 checks the new binary, switches the relative `current` link atomically, and links
 `~/.local/bin/gig` to `current/gig`. It runs setup, requests a restart of an already-running
 service, and polls health for up to ten seconds. Add `~/.local/bin` to `PATH` if the script warns about it.
-A clean commit already installed is a no-op; `--force` reinstalls it. Uncommitted changes
-always get a commit-and-UTC-timestamp label. Commit labels use seven characters on both install paths.
-With `--from`, identical files are a no-op; different files for an installed commit get
-a UTC timestamp suffix. Three releases are retained for rollback, even if the health
-check fails.
+A clean commit already installed is a no-op; `--force` rebuilds or restages, then reruns
+setup, restart and health checking. Existing release folders are never replaced: identical files reuse
+the folder, while different files for an installed label get a UTC timestamp suffix.
+Uncommitted changes always get a commit-and-UTC-timestamp label. Commit labels use
+seven characters on both install paths. Three releases are retained for rollback,
+plus any older release a running daemon uses, even if the health check fails.
+Installing a retained release switches `current` back to it without changing its files.
 
 ```sh
 scripts/install.sh --prefix "$HOME/apps/gigtime" --bin-dir "$HOME/bin"
@@ -151,6 +153,35 @@ Storage is `$XDG_DATA_HOME/gigtime/gigtime.db` (default
 a private `gigtime-<username>` directory under the temporary directory. Existing fallback
 directories must belong to the user and have mode 0700. The socket and database are
 private to the user. `--check` and live completion don't create an absent fallback root.
+
+## Instances
+
+Set `GIGTIME_INSTANCE=dev` for a separate development instance, including commands
+run by agents. Names match `^[a-z][a-z0-9-]{0,31}$`; invalid values fail with `config`
+(exit 5) before creating files. Unset or empty selects the default instance.
+
+For `<name>`, data lives in `$XDG_DATA_HOME/gigtime-<name>/gigtime.db` and the socket
+in `$XDG_RUNTIME_DIR/gigtime-<name>/gigtimed.sock`. The private runtime fallback is
+`gigtime-<username>-<name>` under the temporary directory, containing the instance's
+`gigtime-<name>/gigtimed.sock`. The XDG defaults above still apply.
+
+`bash scripts/install.sh --instance dev` installs shared binaries and sets up
+`gigtimed-dev.service` and `gigtimed-dev.socket`. The service remembers its instance.
+The script uses only `--instance`, ignoring inherited `GIGTIME_INSTANCE`; without
+the flag it installs the default instance.
+A development build installed with `--instance` still moves the shared `current` and
+`gig` link, so use a separate `--prefix` and `--bin-dir` for development builds.
+
+Subsequent commands select an instance:
+
+```sh
+GIGTIME_INSTANCE=dev gig status
+GIGTIME_INSTANCE=dev gig setup --check
+```
+
+Human status and setup output identifies a named instance with `Instance: dev`.
+Their JSON data includes `instance`, a string for a named instance or `null` for
+the default. Each instance keeps its own catalogue and tasks.
 
 ## A working day
 
@@ -266,13 +297,13 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Task (start/pause/resume/stop/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `snapshot`, `started_at`, `stopped_at`, `timezone` |
 | Interval | `number`, `start`, `end` (nullable while running) |
 | Policy snapshot (nullable until stop) | `rounding`, `rate` (nullable), `currency` |
-| Status | `task` (null when no task is open) |
+| Status | `task` (null when no task is open), `instance` (null for default) |
 | Log | `tasks` array |
 | Report | `totals`, `clients` arrays |
 | Project report total | `client`, `project`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `estimated_earnings` |
 | Client/currency report total | `client`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `estimated_earnings` |
 | Earnings (nullable when a rate is absent) | `currency`, `unrounded`, `rounded` |
-| Setup/check | `service_unit`, `service_installed`, `socket_unit`, `socket_installed`, `socket_path`, `socket_exists`, `database_path`, `healthy`, `changed`, `socket_activation` |
+| Setup/check | `service_unit`, `service_installed`, `socket_unit`, `socket_installed`, `socket_path`, `socket_exists`, `database_path`, `healthy`, `changed`, `socket_activation`, `instance` (null for default) |
 | Health (`/v1/health`, inspected by setup) | `status` |
 | Export event (one object per line, no success envelope) | `sequence`, `type`, `stream`, `version`, `timestamp`, `correlation_id`, `data` |
 

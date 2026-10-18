@@ -40,7 +40,7 @@ internal sealed class DaySession : IAsyncDisposable
 
 		File.WriteAllText(systemctl,
 			"#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GIGTIME_TEST_SYSTEMCTL_LOG\"\n"
-			+ "if [ \"$2\" = enable ] && [ \"$4\" = gigtimed.socket ] && [ \"$GIGTIME_TEST_NO_ACTIVATION\" = 1 ]; then exit 1; fi\nexit 0\n");
+			+ "if [ \"$2\" = enable ] && [ \"${4%.socket}\" != \"$4\" ] && [ \"$GIGTIME_TEST_NO_ACTIVATION\" = 1 ]; then exit 1; fi\nexit 0\n");
 
 		File.SetUnixFileMode(systemctl, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 		Environment["PATH"] = bin + Path.PathSeparator + System.Environment.GetEnvironmentVariable("PATH");
@@ -49,15 +49,19 @@ internal sealed class DaySession : IAsyncDisposable
 
 	internal Task StartAsync() => StartAsync(published.Application);
 
-	internal async Task StartAsync(string workingDirectory)
+	internal Task StartAsync(string workingDirectory) => StartAsync(Path.Combine(published.Application, "gigtimed"), workingDirectory);
+
+	internal async Task StartAsync(string executable, string workingDirectory, params string[] arguments)
 	{
-		var start = new ProcessStartInfo(Path.Combine(published.Application, "gigtimed"))
+		var start = new ProcessStartInfo(executable)
 		{
 			WorkingDirectory = workingDirectory,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 		};
 
+		foreach (var argument in arguments) start.ArgumentList.Add(argument);
+		start.Environment.Remove("GIGTIME_INSTANCE");
 		foreach (var (key, value) in Environment) start.Environment[key] = value;
 		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");
 		start.Environment.Remove("LISTEN_PID");
