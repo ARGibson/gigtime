@@ -51,15 +51,14 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		var manager = await ManagerLogAsync(day);
 		manager.Split("--user try-restart gigtimed.service").Length.ShouldBe(3);
 		manager.Split('\n', StringSplitOptions.RemoveEmptyEntries).ShouldAllBe(line => line.StartsWith("--user ", StringComparison.Ordinal));
-		var marker = Path.Combine(root, "current/force-marker");
-		await File.WriteAllTextAsync(marker, "old release", TestContext.Current.CancellationToken);
 		var releaseTime = Directory.GetLastWriteTimeUtc(Path.Combine(root, "current"));
 		var repeated = await InstallAsync(day, second);
 		repeated.ExitCode.ShouldBe(0, repeated.Output + repeated.Error);
 		repeated.Output.ShouldContain("nothing to do");
 		(await ManagerLogAsync(day)).ShouldBe(manager);
-		File.Exists(marker).ShouldBeTrue();
 		Directory.GetLastWriteTimeUtc(Path.Combine(root, "current")).ShouldBe(releaseTime);
+		var marker = Path.Combine(root, "current/force-marker");
+		await File.WriteAllTextAsync(marker, "old release", TestContext.Current.CancellationToken);
 		var forced = await InstallAsync(day, second, "--force");
 		forced.ExitCode.ShouldBe(0, forced.Output + forced.Error);
 		File.Exists(marker).ShouldBeFalse();
@@ -113,6 +112,28 @@ public sealed class InstallScriptTests(PublishedFixture published)
 
 		version.ExitCode.ShouldBe(0, version.Error);
 		version.Output.Trim().ShouldBe("1.0.0+1000003");
+	}
+
+	[Fact]
+	public async Task Published_commit_labels_use_seven_characters_and_changed_files_get_a_timestamp()
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		var source = Pair(day, "abcdef0123456789abcdef0123456789abcdef01");
+		var first = await InstallAsync(day, source);
+		first.ExitCode.ShouldBe(0, first.Output + first.Error);
+		new DirectoryInfo(Path.Combine(Root(day), "current")).LinkTarget.ShouldBe("releases/abcdef0");
+		await File.WriteAllTextAsync(Path.Combine(source, "changed-file"), "different publish", TestContext.Current.CancellationToken);
+		var changed = await InstallAsync(day, source);
+		changed.ExitCode.ShouldBe(0, changed.Output + changed.Error);
+		var target = new DirectoryInfo(Path.Combine(Root(day), "current")).LinkTarget!;
+		target.ShouldStartWith("releases/abcdef0-");
+		target["releases/abcdef0-".Length..].Length.ShouldBe(14);
+		File.Exists(Path.Combine(Root(day), "current/changed-file")).ShouldBeTrue();
+		var repeated = await InstallAsync(day, source);
+		repeated.ExitCode.ShouldBe(0, repeated.Output + repeated.Error);
+		repeated.Output.ShouldContain("nothing to do");
+		new DirectoryInfo(Path.Combine(Root(day), "current")).LinkTarget.ShouldBe(target);
 	}
 
 	[Fact]
@@ -194,9 +215,17 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		var good = await InstallAsync(day, Pair(day, "aaaaaaa"));
 		good.ExitCode.ShouldBe(0, good.Output + good.Error);
 		var units = Units(day);
+		foreach (var label in new[] { "0000001", "0000002", "0000003" })
+		{
+			var old = Path.Combine(Root(day), "releases", label);
+			Directory.CreateDirectory(old);
+			Directory.SetLastWriteTimeUtc(old, new DateTime(2026, 3, 2, 0, 0, 0, DateTimeKind.Utc));
+		}
+
 		var failed = await InstallAsync(day, Pair(day, "bbbbbbb", badHealth: true));
 		failed.ExitCode.ShouldBe(6, failed.Output + failed.Error);
 		failed.Error.ShouldContain("Health check failed; current remains bbbbbbb");
+		Directory.GetDirectories(Path.Combine(Root(day), "releases")).Length.ShouldBe(3);
 		new DirectoryInfo(Path.Combine(Root(day), "current")).LinkTarget.ShouldBe("releases/bbbbbbb");
 		Units(day).OrderBy(item => item.Key).ShouldBe(units.OrderBy(item => item.Key));
 		(await ManagerLogAsync(day)).ShouldContain("--user try-restart gigtimed.service");

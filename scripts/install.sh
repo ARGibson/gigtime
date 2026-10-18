@@ -47,15 +47,15 @@ root=$(realpath -m -- "$prefix")
 bin_dir=$(realpath -m -- "$bin_dir")
 data_home=${XDG_DATA_HOME:-}
 [[ $data_home == /* ]] || data_home=$HOME/.local/share
-data_home=$(realpath -m -- "$data_home")
+data_home=$(realpath -m -- "$data_home/gigtime")
 release_root=$(realpath -m -- "$root/releases")
 for directory in "$root" "$bin_dir" "$release_root"; do
 	case "$directory/" in
-		"$data_home/"*) fail "Install paths cannot be inside the data directory: $directory" ;;
+		"$data_home/"*) fail "Install paths cannot be inside the gigtime data directory (\$XDG_DATA_HOME/gigtime): $directory" ;;
 	esac
 done
 case "$data_home/" in
-	"$release_root/"*) fail "The data directory cannot be inside releases: $data_home" ;;
+	"$release_root/"*) fail "The gigtime data directory (\$XDG_DATA_HOME/gigtime) cannot be inside releases: $data_home" ;;
 esac
 [[ $root != / ]] || fail 'The install root cannot be /.'
 case $root in
@@ -77,7 +77,8 @@ already_current() {
 }
 
 if [[ -z $source_dir ]]; then
-	label=$(git -C "$repo" rev-parse --short HEAD)
+	label=$(git -C "$repo" rev-parse HEAD)
+	label=${label:0:7}
 	if [[ -n $(git -C "$repo" status --porcelain --untracked-files=all) ]]; then
 		label="$label-dirty-$(date -u +%Y%m%d%H%M%S)"
 		clean_label=false
@@ -102,9 +103,18 @@ current_link=false
 bin_link=false
 installed=false
 switched=false
+build_pid=''
+build_dir=''
+health_log=''
 cleanup() {
 	local status=$?
 	trap - EXIT
+	if [[ -n $build_pid ]]; then
+		kill -KILL -- "-$build_pid" 2>/dev/null || true
+		wait "$build_pid" 2>/dev/null || true
+	fi
+	if [[ -n $build_dir ]]; then rm -rf -- "$build_dir"; fi
+	if [[ -n $health_log ]]; then rm -f -- "$health_log"; fi
 	if [[ $switched == false ]]; then
 		if [[ $installed == true ]]; then rm -rf -- "$release"; fi
 		if [[ -n $backup ]]; then mv -T -- "$backup" "$release"; fi
@@ -126,19 +136,25 @@ if [[ -n $source_dir ]]; then
 	cp -a -- "$source_dir/." "$stage/"
 	printf 'Staged published files from %s.\n' "$source_dir"
 else
-	# #22: all SDK intermediates stay with staging, away from a running checkout's output.
-	build_log=$stage/.build.log
-	if ! (
-		cd -- "$repo"
-		export ArtifactsPath="$stage/.build" UseArtifactsOutput=true
+	# #22: native tooling cannot publish under a prefix containing '%'.
+	build_dir=$(mktemp -d /tmp/gigtime-build.XXXXXXXX)
+	build_log=$build_dir/build.log
+	setsid bash -c '
+		cd -- "$1" || exit "$?"
+		export ArtifactsPath="$2/artifacts" UseArtifactsOutput=true
 		dotnet restore --locked-mode || exit "$?"
-		dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore -o "$stage" || exit "$?"
-		dotnet publish src/Gigtime.Server -c Release --no-restore -o "$stage" || exit "$?"
-	) >"$build_log" 2>&1; then
+		dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore -o "$2/published" || exit "$?"
+		dotnet publish src/Gigtime.Server -c Release --no-restore -o "$2/published" || exit "$?"
+	' bash "$repo" "$build_dir" >"$build_log" 2>&1 &
+	build_pid=$!
+	if ! wait "$build_pid"; then
 		cat -- "$build_log" >&2
 		fail 'Build failed; current is unchanged.'
 	fi
-	rm -rf -- "$stage/.build" "$build_log"
+	build_pid=''
+	cp -a -- "$build_dir/published/." "$stage/"
+	rm -rf -- "$build_dir"
+	build_dir=''
 	printf 'Built checkout %s.\n' "$label"
 fi
 
@@ -148,14 +164,18 @@ if ! version=$("$stage/gig" --version); then
 fi
 if [[ -n $source_dir ]]; then
 	if [[ $version =~ \+([[:xdigit:]]{7,40})$ ]]; then
-		label=${BASH_REMATCH[1]}
+		label=${BASH_REMATCH[1]:0:7}
 	else
 		label="version-$(date -u +%Y%m%d%H%M%S)"
 		clean_label=false
 	fi
-	if already_current; then
+	if [[ $force == false && $clean_label == true && -d $root/current ]] && diff -qr -- "$stage" "$root/current/" >/dev/null; then
 		printf 'Already current: %s; nothing to do.\n' "$label"
 		exit 0
+	fi
+	if [[ $force == false && -d $root/releases/$label ]] && ! diff -qr -- "$stage" "$root/releases/$label/" >/dev/null; then
+		label="$label-$(date -u +%Y%m%d%H%M%S)"
+		[[ ! -e $root/releases/$label ]] || fail "Release label already exists: $label; retry in a second."
 	fi
 fi
 printf 'Release: %s.\n' "$label"
@@ -183,18 +203,6 @@ mv -Tf -- "$temporary_bin" "$bin_dir/gig"
 bin_link=false
 printf 'Switched current to %s.\n' "$label"
 
-"$root/current/gig" setup --gigtimed "$root/current/gigtimed"
-printf 'Setup complete.\n'
-systemctl --user try-restart gigtimed.service
-printf 'Requested service restart.\n'
-if "$root/current/gig" setup --check; then
-	printf 'Health check passed.\n'
-else
-	status=$?
-	printf 'Health check failed; current remains %s.\n' "$label" >&2
-	exit "$status"
-fi
-
 # Keep current plus the newest two alternatives; current was just touched above.
 kept=1
 while IFS= read -r -d '' entry; do
@@ -206,3 +214,22 @@ while IFS= read -r -d '' entry; do
 		rm -rf -- "$root/releases/$old_label"
 	fi
 done < <(find "$root/releases" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %f\0' | sort -z -nr)
+
+"$root/current/gig" setup --gigtimed "$root/current/gigtimed"
+printf 'Setup complete.\n'
+systemctl --user try-restart gigtimed.service
+printf 'Requested service restart.\n'
+# #22: setup probes allow 250 ms; socket activation needs several probes on a cold start.
+health_log=$(mktemp /tmp/gigtime-health.XXXXXXXX)
+if timeout 10s bash -c '
+	until "$1" setup --check >"$2" 2>&1; do sleep 0.25; done
+' bash "$root/current/gig" "$health_log"; then
+	cat -- "$health_log"
+	printf 'Health check passed.\n'
+else
+	status=$?
+	[[ $status != 124 ]] || status=6
+	cat -- "$health_log" >&2
+	printf 'Health check failed; current remains %s.\n' "$label" >&2
+	exit "$status"
+fi

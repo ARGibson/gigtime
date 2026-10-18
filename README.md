@@ -48,9 +48,12 @@ scripts/install.sh
 The script builds a native `gig` and the service into `~/.local/lib/gigtime/releases/`,
 checks the new binary, switches the relative `current` link atomically, and links
 `~/.local/bin/gig` to `current/gig`. It runs setup, requests a restart of an already-running
-service, and reports health. Add `~/.local/bin` to `PATH` if the script warns about it.
+service, and polls health for up to ten seconds. Add `~/.local/bin` to `PATH` if the script warns about it.
 A clean commit already installed is a no-op; `--force` reinstalls it. Uncommitted changes
-always get a commit-and-UTC-timestamp label. Three releases are retained for rollback.
+always get a commit-and-UTC-timestamp label. Commit labels use seven characters on both install paths.
+With `--from`, identical files are a no-op; different files for an installed commit get
+a UTC timestamp suffix. Three releases are retained for rollback, even if the health
+check fails.
 
 ```sh
 scripts/install.sh --prefix "$HOME/apps/gigtime" --bin-dir "$HOME/bin"
@@ -59,10 +62,11 @@ scripts/install.sh --force
 ```
 
 `--from` copies the entire published directory, including the service's dependency files,
-and uses the native binary's version commit suffix as its label (or a UTC timestamp if
-there is no suffix). No SDK build is needed in that mode; the service still requires
+and uses seven characters of the native binary's version commit suffix as its label
+(or a UTC timestamp if there is no suffix). No SDK build is needed in that mode; the service still requires
 a compatible .NET/ASP.NET Core runtime. Install paths cannot be inside the
-data directory. A failed build or version check leaves the current install intact. A
+`$XDG_DATA_HOME/gigtime` data directory. The SDK may write its own NuGet cache under
+`$XDG_DATA_HOME`. A failed build or version check leaves the current install intact. A
 health failure after switching exits non-zero and retains the new release so its error
 can be investigated. Setup keeps the service executable path at `current/gigtimed`, so
 unit content stays the same across upgrades.
@@ -74,11 +78,11 @@ health (replace the root below when using `--prefix`):
 root="$HOME/.local/lib/gigtime"
 ln -sfn "releases/<label>" "$root/current"
 systemctl --user try-restart gigtimed.service
-"$root/current/gig" setup --check
+timeout 10s bash -c 'until "$1" setup --check; do sleep 0.25; done' bash "$root/current/gig"
 ```
 
 The install script changes only install files, links and user units; it never writes the
-data directory. Database compatibility between releases is outside its scope.
+`$XDG_DATA_HOME/gigtime` data directory. Database compatibility between releases is outside its scope.
 
 For a manual build and install:
 
