@@ -39,6 +39,49 @@ fictional clients Acme and Globex. Treat exports as private financial records.
 
 ## Build and install
 
+From a checkout, first installs and upgrades use the same command:
+
+```sh
+scripts/install.sh
+```
+
+The script builds a native `gig` and the service into `~/.local/lib/gigtime/releases/`,
+checks the new binary, switches the relative `current` link atomically, and links
+`~/.local/bin/gig` to `current/gig`. It runs setup, requests a restart of an already-running
+service, and reports health. Add `~/.local/bin` to `PATH` if the script warns about it.
+A clean commit already installed is a no-op; `--force` reinstalls it. Uncommitted changes
+always get a commit-and-UTC-timestamp label. Three releases are retained for rollback.
+
+```sh
+scripts/install.sh --prefix "$HOME/apps/gigtime" --bin-dir "$HOME/bin"
+scripts/install.sh --from /path/to/published-pair
+scripts/install.sh --force
+```
+
+`--from` copies the entire published directory, including the service's dependency files,
+and uses the native binary's version commit suffix as its label (or a UTC timestamp if
+there is no suffix). No SDK build is needed in that mode; the service still requires
+a compatible .NET/ASP.NET Core runtime. Install paths cannot be inside the
+data directory. A failed build or version check leaves the current install intact. A
+health failure after switching exits non-zero and retains the new release so its error
+can be investigated. Setup keeps the service executable path at `current/gigtimed`, so
+unit content stays the same across upgrades.
+
+To roll back, choose a retained release label and switch the link, then restart and check
+health (replace the root below when using `--prefix`):
+
+```sh
+root="$HOME/.local/lib/gigtime"
+ln -sfn "releases/<label>" "$root/current"
+systemctl --user try-restart gigtimed.service
+"$root/current/gig" setup --check
+```
+
+The install script changes only install files, links and user units; it never writes the
+data directory. Database compatibility between releases is outside its scope.
+
+For a manual build and install:
+
 Install the .NET SDK selected by `global.json`. Native publishing also requires the
 platform's C toolchain (clang and zlib development headers on Linux). Restore only from
 the repository's configured nuget.org source:
@@ -46,8 +89,8 @@ the repository's configured nuget.org source:
 ```sh
 dotnet restore --locked-mode
 dotnet build --no-restore
-dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true -o artifacts/install
-dotnet publish src/Gigtime.Server -c Release -o artifacts/install
+dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore -o artifacts/install
+dotnet publish src/Gigtime.Server -c Release --no-restore -o artifacts/install
 ```
 
 Keep the entire install directory, including the service's DLLs and dependency files.
