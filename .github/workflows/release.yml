@@ -72,8 +72,9 @@ jobs:
           # #7: generated file-local type names hash their paths; normalize scratch across builds.
           export PathMap="$RUNNER_TEMP/=/_/temp/"
           dotnet restore --locked-mode
-          dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore \
-            -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false \
+          # #7: the same command as ci.yml. With --no-restore the runner fails (PrivateSdkAssemblies is required).
+          dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true \
+            -p:Version="$VERSION" \
             -warnaserror -p:ILLinkTreatWarningsAsErrors=true -p:IlcTreatWarningsAsErrors=true -o "$RUNNER_TEMP/cli"
           name="gigtime-$VERSION-linux-x64"
           mkdir -p "$RUNNER_TEMP/package/$name" artifacts/release
