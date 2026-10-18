@@ -116,8 +116,8 @@ public sealed class RenderingTests
 		output.ToString().ShouldContain("00:01:30");
 		output.ToString().ShouldContain("00:15:00");
 		output.ToString().ShouldContain("Stopped: open");
-		output.ToString().ShouldContain("2026-03-02T09:01:00");
-		if (state == "paused") output.ToString().ShouldContain("2026-03-02T09:02:00");
+		output.ToString().ShouldContain("2026-03-02 09:01");
+		if (state == "paused") output.ToString().ShouldContain("2026-03-02 09:02");
 	}
 
 	[Theory]

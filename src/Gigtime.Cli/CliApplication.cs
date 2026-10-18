@@ -11,8 +11,18 @@ public sealed class CliApplication(
 	bool noColor,
 	Func<IPlatformPaths> paths,
 	Func<IPlatformPaths, IServiceInstaller> installers,
-	Func<string> executable)
+	Func<string> executable,
+	TimeProvider clock)
 {
+	public CliApplication(TextWriter output,
+		TextWriter error,
+		bool isTerminal,
+		bool noColor,
+		Func<IPlatformPaths> paths,
+		Func<IPlatformPaths, IServiceInstaller> installers,
+		Func<string> executable)
+		: this(output, error, isTerminal, noColor, paths, installers, executable, TimeProvider.System) { }
+
 	public CliApplication(TextWriter output, TextWriter error, bool isTerminal, bool noColor, Func<IPlatformPaths> paths)
 		: this(output,
 			error,
@@ -25,7 +35,7 @@ public sealed class CliApplication(
 
 	public RootCommand CreateCommand()
 	{
-		var root = new RootCommand("gig — time tracking over the gigtimed Unix socket");
+		var root = new RootCommand("Track time over the gigtimed Unix socket.");
 
 		var json = new Option<bool>("--json")
 		{
@@ -34,7 +44,7 @@ public sealed class CliApplication(
 		};
 
 		root.Options.Add(json);
-		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json);
+		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json, clock);
 		CatalogueCommands.Configure(root, exchange);
 		TaskCommands.Configure(root, exchange);
 		CorrectionCommands.Configure(root, exchange);
@@ -43,6 +53,12 @@ public sealed class CliApplication(
 		SetupCommands.Configure(root, exchange, output, paths, installers, executable, json);
 		CompletionCommands.Configure(root, output, paths);
 
+		foreach (var option in root.Options)
+		{
+			if (option.Name == "--help") option.Description = "Show help and usage information.";
+			if (option.Name == "--version") option.Description = "Show version information.";
+		}
+
 		return root;
 	}
 
@@ -50,7 +66,7 @@ public sealed class CliApplication(
 	{
 		var root = CreateCommand();
 		var json = (Option<bool>)root.Options.Single(o => o.Name == "--json");
-		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json);
+		var exchange = new CliExchange(output, error, isTerminal, noColor, paths, json, clock);
 
 		var parsed = root.Parse(args,
 			new ParserConfiguration

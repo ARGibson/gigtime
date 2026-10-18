@@ -55,7 +55,7 @@ public sealed class CommandTests
 			{
 				output.ToString().ShouldContain("01:01:01");
 				output.ToString().ShouldContain("Interval");
-				output.ToString().ShouldContain("2026-03-02T09:00:00");
+				output.ToString().ShouldContain("2026-03-02 09:00");
 			}
 		}
 	}

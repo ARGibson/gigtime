@@ -150,6 +150,21 @@ currency. Earnings are unrounded decimal amounts per task, summed and then round
 per project total and client/currency total, away from zero at the currency's minor unit.
 Most currencies use two decimal places; exceptions include zero for JPY and three for BHD.
 
+Human task times use the effective client timezone, printed once as `Times in
+America/New_York` (or the selected IANA zone). Instants on today in that zone use
+`HH:mm`; other dates use `yyyy-MM-dd HH:mm`. Durations remain `HH:MM:SS`.
+Open tasks show `open`, and running intervals show `running`. `log` includes
+started/stopped times and starts a new labelled table when the timezone changes,
+keeping newest-first order. JSON instants remain UTC; each task also carries its
+resolved `timezone`.
+
+For a task crossing midnight in New York, viewed after both dates:
+
+```text
+Times in America/New_York
+Started: 2026-03-02 23:30  Stopped: 2026-03-03 00:30
+```
+
 ## JSON reference
 
 Service responses are envelopes. Success has `ok` set to true, `command` and `data`, and omits
@@ -173,7 +188,7 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Entity (nested client/project) | `id`, `key` |
 | Money (rate) | `amount`, `currency` |
 | Acknowledgement (archive) | `id` (nullable) |
-| Task (start/pause/resume/stop/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `snapshot`, `started_at`, `stopped_at` |
+| Task (start/pause/resume/stop/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `snapshot`, `started_at`, `stopped_at`, `timezone` |
 | Interval | `number`, `start`, `end` (nullable while running) |
 | Policy snapshot (nullable until stop) | `rounding`, `rate` (nullable), `currency` |
 | Status | `task` (null when no task is open) |

@@ -30,6 +30,8 @@ public sealed class PublishedFixture : IAsyncLifetime
 		};
 
 		foreach (var value in environment.Values.Where(Path.IsPathFullyQualified)) Directory.CreateDirectory(value);
+		var restored = await CommandProcess.RunAsync("dotnet", ["restore", "--locked-mode"], repository, environment, TimeSpan.FromMinutes(5));
+		restored.ExitCode.ShouldBe(0, "Locked restore failed:\n" + restored.Output + restored.Error);
 
 		foreach (var project in new[] { "Gigtime.Cli", "Gigtime.Server" })
 		{
@@ -37,7 +39,7 @@ public sealed class PublishedFixture : IAsyncLifetime
 
 			string[] arguments =
 			[
-				"publish", "src/" + project, "-c", "Release", "-p:RestoreLockedMode=true",
+				"publish", "src/" + project, "-c", "Release", "--no-restore",
 				"-p:PublishAot=" + (cli ? "true" : "false"), "-warnaserror", "-p:ILLinkTreatWarningsAsErrors=true",
 				"-p:IlcTreatWarningsAsErrors=true", "-o", cli ? Path.Combine(Root, "cli") : Application
 			];

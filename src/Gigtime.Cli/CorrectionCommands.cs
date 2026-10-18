@@ -35,7 +35,8 @@ internal static class CorrectionCommands
 
 		var interval = new Option<int?>("--interval")
 		{
-			Arity = ArgumentArity.ExactlyOne
+			Arity = ArgumentArity.ExactlyOne,
+			Description = "Select the numbered interval to correct."
 		};
 
 		amend.Options.Add(interval);

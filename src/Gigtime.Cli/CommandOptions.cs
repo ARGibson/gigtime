@@ -17,6 +17,7 @@ internal static class CommandOptions
 		command.Arguments.Add(new Argument<string?>(name)
 		{
 			Arity = optional ? ArgumentArity.ZeroOrOne : ArgumentArity.ExactlyOne,
+			Description = name == "task" ? "Select a task by id." : "Supply the " + name + " key.",
 		});
 	}
 
@@ -27,6 +28,25 @@ internal static class CommandOptions
 		{
 			Required = required,
 			Arity = ArgumentArity.ZeroOrOne,
+			Description = name switch
+			{
+				"timezone" => "Set the IANA timezone.",
+				"week-starts" => "Set the first weekday.",
+				"rounding" => "Set the rounding policy.",
+				"name" => "Set the display name.",
+				"key" => "Set the new key.",
+				"currency" => "Set the currency code.",
+				"rate" => "Set the hourly rate.",
+				"ref" => "Set an opaque reference without task content.",
+				"client" => "Select the client key.",
+				"project" => "Select the project key.",
+				"range" => "Select inclusive local dates as yyyy-MM-dd..yyyy-MM-dd.",
+				"from" or "to" when command.Name == "export" => "Set an ISO instant or inclusive UTC date bound.",
+				"from" or "to" or "start" or "end" => "Set an ISO instant or local time in the client's timezone.",
+				"reason" => "Record the reason for voiding the task.",
+				"gigtimed" => "Select the absolute daemon executable path.",
+				_ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown text option."),
+			},
 		};
 
 		option.Validators.Add(result =>
@@ -37,7 +57,21 @@ internal static class CommandOptions
 		command.Options.Add(option);
 	}
 
-	internal static void Flag(Command command, string name) => command.Options.Add(new Option<bool>("--" + name));
+	internal static void Flag(Command command, string name)
+	{
+		command.Options.Add(new Option<bool>("--" + name)
+		{
+			Description = name switch
+			{
+				"all" => "Include archived or voided entries.",
+				"week" => "Report this week.",
+				"month" => "Report this month.",
+				"check" => "Inspect setup and health without changes.",
+				_ when name.StartsWith("clear-", StringComparison.Ordinal) => "Clear the " + name[6..] + " override.",
+				_ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown flag."),
+			},
+		});
+	}
 
 	internal static void Exclusive(Command command, string value, string clear)
 	{

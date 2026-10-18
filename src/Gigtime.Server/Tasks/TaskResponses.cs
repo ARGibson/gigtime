@@ -27,6 +27,7 @@ public static class TaskResponses
 			DurationText.Format(rounded),
 			snapshot,
 			task.StartedAt!.Value,
-			task.StoppedAt);
+			task.StoppedAt,
+			c.Timezone ?? catalogue.Defaults.Timezone);
 	}
 }

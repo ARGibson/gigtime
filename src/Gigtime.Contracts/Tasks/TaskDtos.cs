@@ -18,7 +18,8 @@ public sealed record TaskDto(
 	string Display,
 	PolicySnapshotDto? Snapshot,
 	DateTimeOffset StartedAt,
-	DateTimeOffset? StoppedAt);
+	DateTimeOffset? StoppedAt,
+	string Timezone = "UTC");
 
 public sealed record TasksDto(IReadOnlyList<TaskDto> Tasks);
 
