@@ -34,6 +34,15 @@ public sealed class SetupCompletionTests(PublishedFixture published)
 		var content = await File.ReadAllTextAsync(service, TestContext.Current.CancellationToken);
 		content.ShouldContain("ExecStart=\"" + Path.Combine(published.Application, "gigtimed") + "\"");
 		content.ShouldContain(day.Environment["XDG_RUNTIME_DIR"]);
+		content.ShouldContain("WorkingDirectory=" + published.Application + "\n");
+
+		// #28: migrate a unit written before WorkingDirectory was emitted, then leave it unchanged.
+		await File.WriteAllTextAsync(service,
+			content.Replace("WorkingDirectory=" + published.Application + "\n", "", StringComparison.Ordinal),
+			TestContext.Current.CancellationToken);
+
+		(await day.SuccessAsync("setup")).GetProperty("changed").GetBoolean().ShouldBeTrue();
+		(await File.ReadAllTextAsync(service, TestContext.Current.CancellationToken)).ShouldBe(content);
 		var written = File.GetLastWriteTimeUtc(service);
 		var socket = installed.GetProperty("socket_unit").GetString()!;
 
@@ -152,6 +161,24 @@ public sealed class SetupCompletionTests(PublishedFixture published)
 		result.Output.ShouldContain("RESULT:gig report --range :END");
 		result.Output.ShouldContain("RESULT:gig start acme :END");
 		result.Output.ShouldContain("RESULT:gig start acme work :END");
+	}
+
+	[Theory]
+	[InlineData(" ")]
+	[InlineData("\t")]
+	public async Task Setup_rejects_daemon_folder_ending_in_whitespace_without_manager_calls(string whitespace)
+	{
+		await using var day = new DaySession(published);
+		var directory = Path.Combine(day.Root, "daemon" + whitespace);
+		Directory.CreateDirectory(directory);
+		var daemon = Path.Combine(directory, "gigtimed");
+		File.Copy(Path.Combine(published.Application, "gigtimed"), daemon);
+		await day.RefusalAsync(5, "config", "setup", "--gigtimed", daemon);
+		var human = await day.GigAsync("setup", "--gigtimed", daemon);
+		human.ExitCode.ShouldBe(5);
+		human.Error.ShouldContain("ends in unsupported whitespace");
+		File.Exists(day.Environment["GIGTIME_TEST_SYSTEMCTL_LOG"]).ShouldBeFalse();
+		Directory.Exists(Path.Combine(day.Environment["XDG_CONFIG_HOME"], "systemd")).ShouldBeFalse();
 	}
 
 	[Theory]

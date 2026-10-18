@@ -5,8 +5,22 @@ using JasperFx.CodeGeneration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wolverine;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+	// #28: disable configuration file watchers before host defaults create their providers.
+	Args = [.. args, "--hostBuilder:reloadConfigOnChange=false"],
+	ContentRootPath = AppContext.BaseDirectory,
+});
+
 builder.Host.ApplyJasperFxExtensions();
+
+// #28: explicit codegen commands still write into the project, not the runtime content root.
+if (args is ["codegen", ..])
+{
+	builder.Services.Configure<JasperFxOptions>(options =>
+		options.GeneratedCodeOutputPath = Path.Combine(Directory.GetCurrentDirectory(), "Internal", "Generated"));
+}
+
 builder.Services.TryAddSingleton<IPlatformPaths, LinuxPlatformPaths>();
 builder.Services.TryAddSingleton(TimeProvider.System);
 

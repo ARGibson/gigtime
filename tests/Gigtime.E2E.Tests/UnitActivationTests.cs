@@ -42,7 +42,7 @@ public sealed class UnitActivationTests(PublishedFixture published)
 
 		var start = new ProcessStartInfo(activator)
 		{
-			WorkingDirectory = day.Root,
+			WorkingDirectory = Decode(service.Single(line => line.StartsWith("WorkingDirectory=", StringComparison.Ordinal))[17..]),
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 		};

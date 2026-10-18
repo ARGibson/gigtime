@@ -17,6 +17,8 @@ public sealed class UnitSyntaxTests(PublishedFixture published)
 		var daemon = Path.Combine(directory, "gigtimed");
 		File.Copy(Path.Combine(published.Application, "gigtimed"), daemon);
 		var installed = await day.SuccessAsync("setup", "--gigtimed", daemon);
+		var service = await File.ReadAllTextAsync(installed.GetProperty("service_unit").GetString()!, TestContext.Current.CancellationToken);
+		service.ShouldContain("WorkingDirectory=" + directory.Replace("%", "%%", StringComparison.Ordinal) + "\n");
 		var root = Path.Combine(day.Root, "verify");
 		var units = Path.Combine(root, "etc/systemd/system");
 		Directory.CreateDirectory(units);

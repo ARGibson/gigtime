@@ -11,6 +11,7 @@ internal sealed class DaySession : IAsyncDisposable
 	private Task<string>? serverError;
 	private readonly PublishedFixture published;
 	internal string Root { get; } = Path.Combine(Path.GetTempPath(), "gig-day-" + Guid.NewGuid().ToString("N"));
+	internal int ServerProcessId => server!.Id;
 	internal Dictionary<string, string> Environment { get; } = new(StringComparer.Ordinal);
 
 	internal DaySession(PublishedFixture published)
@@ -46,11 +47,13 @@ internal sealed class DaySession : IAsyncDisposable
 		Environment["GIGTIME_TEST_SYSTEMCTL_LOG"] = Path.Combine(Root, "systemctl.log");
 	}
 
-	internal async Task StartAsync()
+	internal Task StartAsync() => StartAsync(published.Application);
+
+	internal async Task StartAsync(string workingDirectory)
 	{
 		var start = new ProcessStartInfo(Path.Combine(published.Application, "gigtimed"))
 		{
-			WorkingDirectory = published.Application,
+			WorkingDirectory = workingDirectory,
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
 		};
