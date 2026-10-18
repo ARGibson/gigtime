@@ -1,8 +1,34 @@
 # gigtime
 
-gigtime tracks time against clients and projects from a terminal. `gig` is a native CLI;
-`gigtimed` keeps an event history and SQLite projections behind a private Unix socket.
-Linux with systemd user services is the supported installation target.
+Time tracking for people who bill by the hour, without leaving the terminal.
+
+Type `gig start acme web` when you sit down, `gig stop` when you're done, and gigtime keeps every minute against the right client and project. At the end of the week, `gig report` tells you what to invoice.
+
+```console
+$ gig start acme web --ref sprint-12
+$ gig pause        # lunch
+$ gig resume
+$ gig stop
+$ gig report --week
+  Client   Project   Currency   Raw        Rounded    Estimated earnings
+  acme     web       GBP        03:40:00   03:40:00   146.67
+```
+
+## Why gigtime
+
+Starting and stopping has to be instant, or you stop doing it. `gig` is a native binary that starts in about 7 ms, and zsh completion fills in your clients, projects and recent task ids from your own data.
+
+It does the arithmetic the way an invoice needs it. Each client has a currency and timezone, and each project an hourly rate. A task's total is rounded once, to the nearest minute, and the task keeps the rate and rules in force when you stopped it, so raising your rate next month doesn't rewrite last month's numbers.
+
+Mistakes are cheap to fix. Forgot to stop? `gig amend` corrects the times. Forgot to start? `gig add` backfills the task. Logged it to the wrong project? Reassign it. Every change is recorded as a new event rather than overwriting the old one, so the history stays honest.
+
+Reports follow your clients, not your clock: weeks and months are counted in each client's timezone, from the week start you choose, and amounts in different currencies are never added together.
+
+Your data stays on your machine. A small local service owns one SQLite file behind a private Unix socket. There's no network listener, no account and no sync, and `gig export` writes the whole history as JSON Lines whenever you want a backup.
+
+Scripts and agents can drive it too. Every command takes `--json` and prints one predictable envelope, with exit codes you can branch on.
+
+gigtime runs on Linux, with systemd user services.
 
 ## Data boundary
 
