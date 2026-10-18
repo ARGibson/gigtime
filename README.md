@@ -57,14 +57,13 @@ Choose the version shown on the release page. Upgrading uses the same steps with
 newer archive. The bundled installer runs `gig setup`, switches the installed release,
 and checks health. Add `~/.local/bin` to `PATH` if it reports a warning.
 
-Requirements: Linux x64 with systemd user services, glibc **2.39 or newer**, and the
+Requirements: Linux x64 with systemd user services, glibc **2.34 or newer**, and the
 **ASP.NET Core Runtime 10** (which includes the .NET runtime) for `gigtimed`. The native
 `gig` needs no .NET runtime. The ASP.NET Core runtime must be discoverable by the
 systemd user unit: install it system-wide, or register its directory in
 `/etc/dotnet/install_location`. An unregistered `~/.dotnet` install without `DOTNET_ROOT` in the unit
-isn't found. These binaries are built on `ubuntu-24.04`; its
-[published runner image SBOM](https://github.com/actions/runner-images/releases/tag/ubuntu24/20261012.334)
-lists glibc `2.39-0ubuntu8.9`. Alpine/musl is not supported by this archive.
+isn't found. The release binaries require glibc 2.34, measured from their imported
+`GLIBC_*` symbols. Alpine/musl is not supported by this archive.
 
 ## Build from source
 
@@ -123,7 +122,7 @@ the repository's configured nuget.org source:
 dotnet restore --locked-mode
 dotnet build --no-restore
 dotnet publish src/Gigtime.Cli -c Release -r linux-x64 -p:PublishAot=true --no-restore -o artifacts/install
-dotnet publish src/Gigtime.Server -c Release --no-restore -o artifacts/install
+dotnet publish src/Gigtime.Server -c Release -r linux-x64 --self-contained false --no-restore -o artifacts/install
 ```
 
 Keep the entire install directory, including the service's DLLs and dependency files.

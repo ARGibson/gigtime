@@ -75,8 +75,8 @@ jobs:
             -warnaserror -p:ILLinkTreatWarningsAsErrors=true -p:IlcTreatWarningsAsErrors=true -o "$RUNNER_TEMP/cli"
           name="gigtime-$VERSION-linux-x64"
           mkdir -p "$RUNNER_TEMP/package/$name" artifacts/release
-          # The ubuntu-24.04 x64 host produces a linux-x64 apphost; dependencies stay framework-dependent.
-          dotnet publish src/Gigtime.Server -c Release --self-contained false --no-restore \
+          # #26: select only linux-x64 natives while retaining the shared ASP.NET Core runtime.
+          dotnet publish src/Gigtime.Server -c Release -r linux-x64 --self-contained false --no-restore \
             -p:Version="$VERSION" -p:DebugType=None -p:DebugSymbols=false -warnaserror \
             -o "$RUNNER_TEMP/package/$name"
           cp "$RUNNER_TEMP/cli/gig" "$RUNNER_TEMP/package/$name/gig"

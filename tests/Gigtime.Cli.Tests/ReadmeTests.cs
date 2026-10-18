@@ -77,10 +77,10 @@ public sealed partial class ReadmeTests
 	}
 
 	[Fact]
-	public void Readme_server_install_uses_the_fixture_framework_dependent_publish_without_a_runtime_identifier()
+	public void Readme_server_install_uses_the_fixture_framework_dependent_publish_for_linux_x64()
 	{
 		var command = Readme().Split('\n').Single(line => line.StartsWith("dotnet publish src/Gigtime.Server ", StringComparison.Ordinal));
-		command.ShouldBe("dotnet publish src/Gigtime.Server -c Release --no-restore -o artifacts/install");
+		command.ShouldBe("dotnet publish src/Gigtime.Server -c Release -r linux-x64 --self-contained false --no-restore -o artifacts/install");
 	}
 
 	[Fact]
