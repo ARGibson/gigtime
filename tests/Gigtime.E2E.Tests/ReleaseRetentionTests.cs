@@ -12,7 +12,10 @@ public sealed class ReleaseRetentionTests(PublishedFixture published)
 	[InlineData("executable")]
 	[InlineData("working-directory")]
 	[InlineData("dotnet")]
-	public async Task Upgrades_retain_another_instances_running_release_and_force_refuses_to_replace_it(string location)
+	[InlineData("dotnet-release")]
+	[InlineData("dotnet-relative")]
+	[InlineData("dotnet-current")]
+	public async Task Upgrades_and_rollbacks_preserve_another_instances_running_release(string location)
 	{
 		if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Release retention requires Linux procfs.");
 
@@ -28,9 +31,17 @@ public sealed class ReleaseRetentionTests(PublishedFixture published)
 		foreach (var (key, value) in day.Environment) other.Environment[key] = value;
 		other.Environment["GIGTIME_INSTANCE"] = "other";
 
-		if (location == "dotnet")
+		if (location.StartsWith("dotnet", StringComparison.Ordinal))
 		{
-			await other.StartAsync("dotnet", release, Path.Combine(published.Application, "gigtimed.dll"));
+			var dll = location switch
+			{
+				"dotnet" => Path.Combine(published.Application, "gigtimed.dll"),
+				"dotnet-current" => Path.Combine(root, "current/gigtimed.dll"),
+				"dotnet-relative" => Path.GetRelativePath(day.Root, Path.Combine(release, "gigtimed.dll")),
+				_ => Path.Combine(release, "gigtimed.dll"),
+			};
+
+			await other.StartAsync("dotnet", location == "dotnet" ? release : day.Root, dll);
 		}
 		else
 		{
@@ -51,37 +62,50 @@ public sealed class ReleaseRetentionTests(PublishedFixture published)
 		else
 		{
 			executable.ShouldNotStartWith(release + Path.DirectorySeparatorChar);
-			workingDirectory.ShouldBe(release);
+			workingDirectory.ShouldBe(location is "dotnet" or "working-directory" ? release : day.Root);
 		}
 
 		await other.CatalogueAsync();
 		await other.SuccessAsync("start", "acme", "work");
 		var data = (await other.GigAsync("export")).Output;
 		var originalFiles = Files(release);
+		var originalInode = await InodeAsync(day, Path.Combine(release, "gigtimed"));
+		var latestSource = "";
 
 		foreach (var label in new[] { "bbbbbbb", "ccccccc", "ddddddd" })
 		{
-			var upgraded = await InstallAsync(day, Pair(day, label));
+			latestSource = Pair(day, label);
+			var upgraded = await InstallAsync(day, latestSource);
 			upgraded.ExitCode.ShouldBe(0, upgraded.Output + upgraded.Error);
 			Directory.Exists(release).ShouldBeTrue();
 			Files(release).OrderBy(item => item.Key).ShouldBe(originalFiles.OrderBy(item => item.Key));
 			(await other.GigAsync("export")).Output.ShouldBe(data);
 		}
 
-		var current = new DirectoryInfo(Path.Combine(root, "current")).LinkTarget;
-		current.ShouldBe("releases/ddddddd");
+		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe("releases/ddddddd");
 		var link = Path.Combine(day.Environment["HOME"], ".local/bin/gig");
 		var binTarget = new FileInfo(link).LinkTarget;
-		var managerLog = day.Environment["GIGTIME_TEST_SYSTEMCTL_LOG"];
-		var manager = await File.ReadAllTextAsync(managerLog, TestContext.Current.CancellationToken);
-		var refused = await InstallAsync(day, source, "--force");
-		refused.ExitCode.ShouldNotBe(0, refused.Output + refused.Error);
-		refused.Error.ShouldContain("running gigtimed process");
-		refused.Error.ShouldContain("Cannot replace release");
-		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe(current);
-		new FileInfo(link).LinkTarget.ShouldBe(binTarget);
+
+		foreach (var force in new[] { false, true })
+		{
+			var rollback = await InstallAsync(day, source, force ? ["--force"] : []);
+			rollback.ExitCode.ShouldBe(0, rollback.Output + rollback.Error);
+			new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe("releases/aaaaaaa");
+			new FileInfo(link).LinkTarget.ShouldBe(binTarget);
+			Files(release).OrderBy(item => item.Key).ShouldBe(originalFiles.OrderBy(item => item.Key));
+			(await InodeAsync(day, Path.Combine(release, "gigtimed"))).ShouldBe(originalInode);
+			(await other.GigAsync("export")).Output.ShouldBe(data);
+			var upgrade = await InstallAsync(day, latestSource);
+			upgrade.ExitCode.ShouldBe(0, upgrade.Output + upgrade.Error);
+		}
+
+		await File.WriteAllTextAsync(Path.Combine(source, "changed-file"), "changed publish", TestContext.Current.CancellationToken);
+		var changed = await InstallAsync(day, source, "--force");
+		changed.ExitCode.ShouldBe(0, changed.Output + changed.Error);
+		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldStartWith("releases/aaaaaaa-");
+		File.Exists(Path.Combine(root, "current/changed-file")).ShouldBeTrue();
 		Files(release).OrderBy(item => item.Key).ShouldBe(originalFiles.OrderBy(item => item.Key));
-		(await File.ReadAllTextAsync(managerLog, TestContext.Current.CancellationToken)).ShouldBe(manager);
+		(await InodeAsync(day, Path.Combine(release, "gigtimed"))).ShouldBe(originalInode);
 		(await other.GigAsync("export")).Output.ShouldBe(data);
 		Directory.GetDirectories(Path.Combine(root, "releases"), ".*").ShouldBeEmpty();
 	}
@@ -124,6 +148,14 @@ public sealed class ReleaseRetentionTests(PublishedFixture published)
 			day.Root,
 			day.Environment,
 			TimeSpan.FromSeconds(20));
+	}
+
+	private static async Task<string> InodeAsync(DaySession day, string path)
+	{
+		var result = await CommandProcess.RunAsync("stat", ["-c", "%i", path], day.Root, day.Environment, TimeSpan.FromSeconds(10));
+		result.ExitCode.ShouldBe(0, result.Error);
+
+		return result.Output;
 	}
 
 	private static Dictionary<string, string> Files(string directory)

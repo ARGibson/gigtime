@@ -87,15 +87,6 @@ public sealed class InstallActivationTests(PublishedFixture published, ITestOutp
 			var firstPid = await File.ReadAllTextAsync(Path.Combine(day.Environment["HOME"], "activation.pid"),
 				TestContext.Current.CancellationToken);
 
-			// #30: replacing an active release is refused; stop the selected instance before forcing its label.
-			var stopped = await CommandProcess.RunAsync(manager,
-				["--user", "stop", service],
-				day.Root,
-				day.Environment,
-				TimeSpan.FromSeconds(10));
-
-			stopped.ExitCode.ShouldBe(0, stopped.Error);
-
 			var upgraded = await CommandProcess.RunAsync("bash",
 				[script, "--from", published.Application, "--force", .. instanceArguments],
 				day.Root,

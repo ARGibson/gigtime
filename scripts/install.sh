@@ -10,7 +10,7 @@ Build and install gigtime on Linux, or upgrade the current installation.
   --bin-dir DIR   Directory for the gig link (default: $HOME/.local/bin).
   --from DIR      Install an already-published gig and gigtimed directory.
   --instance NAME Install and restart the named instance (default: unnamed).
-  --force         Reinstall even when the clean label is already current.
+  --force         Run setup, restart and health even when already current.
   --help          Show this help.
 HELP
 }
@@ -124,12 +124,20 @@ activate_install() {
 declare -A active_releases=()
 collect_active_releases() {
 	active_releases=()
-	local process executable target relative name argument daemon
-	local -a arguments
+	local process executable target relative name argument daemon working_directory dll
+	local map_address map_permissions map_offset map_device map_inode mapped_path
+	local -a arguments targets
 	for process in /proc/[0-9]*; do
 		[[ -O $process ]] || continue
 		executable=$(readlink -- "$process/exe" 2>/dev/null) || continue
 		executable=${executable%" (deleted)"}
+		case ${executable##*/} in
+			gigtimed|dotnet) ;;
+			*) continue ;;
+		esac
+		working_directory=$(readlink -- "$process/cwd" 2>/dev/null || true)
+		working_directory=${working_directory%" (deleted)"}
+		targets=("$executable" "$working_directory")
 		case ${executable##*/} in
 			gigtimed) ;;
 			dotnet)
@@ -137,12 +145,27 @@ collect_active_releases() {
 				mapfile -d '' -t arguments 2>/dev/null < "$process/cmdline" || continue
 				daemon=false
 				for argument in "${arguments[@]}"; do
-					if [[ ${argument##*/} == gigtimed.dll ]]; then daemon=true; break; fi
+					if [[ ${argument##*/} == gigtimed.dll ]]; then
+						daemon=true
+						dll=''
+						if [[ $argument == /* ]]; then
+							dll=$(realpath -e -- "$argument" 2>/dev/null || true)
+						elif [[ -n $working_directory ]]; then
+							dll=$(realpath -e -- "$working_directory/$argument" 2>/dev/null || true)
+						fi
+						[[ -z $dll ]] || targets+=("$dll")
+						break
+					fi
 				done
-				[[ $daemon == true ]] || continue ;;
+				[[ $daemon == true ]] || continue
+				# #30: a current symlink can move after launch; mappings retain the loaded DLL's path.
+				while read -r map_address map_permissions map_offset map_device map_inode mapped_path; do
+					mapped_path=${mapped_path%" (deleted)"}
+					if [[ ${mapped_path##*/} == gigtimed.dll ]]; then targets+=("$mapped_path"); fi
+				done 2>/dev/null < "$process/maps" || true ;;
 			*) continue ;;
 		esac
-		for target in "$executable" "$(readlink -- "$process/cwd" 2>/dev/null || true)"; do
+		for target in "${targets[@]}"; do
 			target=${target%" (deleted)"}
 			case $target in
 				"$release_root/"*)
@@ -186,7 +209,6 @@ fi
 mkdir -p -- "$root/releases" "$bin_dir"
 stage=$root/releases/.staging-$$
 release=''
-backup=''
 temporary_current=$root/.current-$$
 temporary_bin=$bin_dir/.gig-$$
 staged=false
@@ -207,9 +229,6 @@ cleanup() {
 	if [[ -n $health_log ]]; then rm -f -- "$health_log"; fi
 	if [[ $switched == false ]]; then
 		if [[ $installed == true ]]; then rm -rf -- "$release"; fi
-		if [[ -n $backup ]]; then mv -T -- "$backup" "$release"; fi
-	elif [[ -n $backup ]]; then
-		rm -rf -- "$backup"
 	fi
 	if [[ $staged == true ]]; then rm -rf -- "$stage"; fi
 	if [[ $current_link == true ]]; then rm -f -- "$temporary_current"; fi
@@ -268,18 +287,26 @@ if [[ -n $source_dir ]]; then
 		fi
 		exit 0
 	fi
-	if [[ $force == false && -d $root/releases/$label ]] && ! diff -qr -- "$stage" "$root/releases/$label/" >/dev/null; then
+fi
+# #30: release folders are immutable, including forced installs and rollbacks.
+release=$root/releases/$label
+reuse=false
+if [[ -e $release || -L $release ]]; then
+	if [[ -d $release ]] && diff -qr -- "$stage" "$release/" >/dev/null; then
+		reuse=true
+	else
 		label="$label-$(date -u +%Y%m%d%H%M%S)"
-		[[ ! -e $root/releases/$label ]] || fail "Release label already exists: $label; retry in a second."
+		release=$root/releases/$label
+		if [[ -e $release || -L $release ]]; then
+			if [[ -d $release ]] && diff -qr -- "$stage" "$release/" >/dev/null; then
+				reuse=true
+			else
+				fail "Release label already exists: $label; retry in a second."
+			fi
+		fi
 	fi
 fi
 printf 'Release: %s.\n' "$label"
-
-release=$root/releases/$label
-collect_active_releases
-if [[ ( -e $release || -L $release ) && ${active_releases[$label]-} == 1 ]]; then
-	fail "Cannot replace release '$label': a running gigtimed process uses it."
-fi
 
 previous_current=$(readlink -- "$root/current" || true)
 
@@ -288,16 +315,17 @@ ln -s -- "$root/current/gig" "$temporary_bin"
 bin_link=true
 ln -s -- "releases/$label" "$temporary_current"
 current_link=true
-if [[ -e $release || -L $release ]]; then
-	candidate_backup=$root/releases/.backup-$$
-	[[ ! -e $candidate_backup && ! -L $candidate_backup ]] || fail "Backup path already exists: $candidate_backup"
-	mv -T -- "$release" "$candidate_backup"
-	backup=$candidate_backup
+if [[ $reuse == true ]]; then
+	rm -rf -- "$stage"
+	staged=false
+else
+	# Do not overwrite a folder created by another installer since the comparison.
+	mv -T -n -- "$stage" "$release"
+	[[ ! -e $stage ]] || fail "Release label already exists: $label; retry in a second."
+	staged=false
+	installed=true
+	touch -- "$release"
 fi
-mv -T -- "$stage" "$release"
-staged=false
-installed=true
-touch -- "$release"
 mv -Tf -- "$temporary_current" "$root/current"
 current_link=false
 switched=true

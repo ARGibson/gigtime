@@ -77,11 +77,13 @@ The script builds a native `gig` and the service into `~/.local/lib/gigtime/rele
 checks the new binary, switches the relative `current` link atomically, and links
 `~/.local/bin/gig` to `current/gig`. It runs setup, requests a restart of an already-running
 service, and polls health for up to ten seconds. Add `~/.local/bin` to `PATH` if the script warns about it.
-A clean commit already installed is a no-op; `--force` reinstalls it. Uncommitted changes
-always get a commit-and-UTC-timestamp label. Commit labels use seven characters on both install paths.
-With `--from`, identical files are a no-op; different files for an installed commit get
-a UTC timestamp suffix. Three releases are retained for rollback, even if the health
-check fails.
+A clean commit already installed is a no-op; `--force` still runs setup, restart and
+health checking. Existing release folders are never replaced: identical files reuse
+the folder, while different files for an installed label get a UTC timestamp suffix.
+Uncommitted changes always get a commit-and-UTC-timestamp label. Commit labels use
+seven characters on both install paths. Three releases are retained for rollback,
+plus any older release a running daemon uses, even if the health check fails.
+Installing a retained release switches `current` back to it without changing its files.
 
 ```sh
 scripts/install.sh --prefix "$HOME/apps/gigtime" --bin-dir "$HOME/bin"
@@ -167,7 +169,8 @@ in `$XDG_RUNTIME_DIR/gigtime-<name>/gigtimed.sock`. The private runtime fallback
 `gigtimed-dev.service` and `gigtimed-dev.socket`. The service remembers its instance.
 The script uses only `--instance`, ignoring inherited `GIGTIME_INSTANCE`; without
 the flag it installs the default instance.
-A development build installed with `--instance` still moves the shared `current` and `gig` link, so use a separate `--prefix` and `--bin-dir` for development builds.
+A development build installed with `--instance` still moves the shared `current` and
+`gig` link, so use a separate `--prefix` and `--bin-dir` for development builds.
 
 Subsequent commands select an instance:
 

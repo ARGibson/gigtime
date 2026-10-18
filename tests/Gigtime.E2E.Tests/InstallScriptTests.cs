@@ -57,11 +57,10 @@ public sealed class InstallScriptTests(PublishedFixture published)
 		repeated.Output.ShouldContain("nothing to do");
 		(await ManagerLogAsync(day)).ShouldBe(manager);
 		Directory.GetLastWriteTimeUtc(Path.Combine(root, "current")).ShouldBe(releaseTime);
-		var marker = Path.Combine(root, "current/force-marker");
-		await File.WriteAllTextAsync(marker, "old release", TestContext.Current.CancellationToken);
+		var folderTime = Directory.GetLastWriteTimeUtc(Path.Combine(root, "releases/bbbbbbb"));
 		var forced = await InstallAsync(day, second, "--force");
 		forced.ExitCode.ShouldBe(0, forced.Output + forced.Error);
-		File.Exists(marker).ShouldBeFalse();
+		Directory.GetLastWriteTimeUtc(Path.Combine(root, "releases/bbbbbbb")).ShouldBe(folderTime);
 		new DirectoryInfo(Path.Combine(root, "current")).LinkTarget.ShouldBe("releases/bbbbbbb");
 		Units(day).OrderBy(item => item.Key).ShouldBe(units.OrderBy(item => item.Key));
 		(await ManagerLogAsync(day)).Split("--user try-restart gigtimed.service").Length.ShouldBe(4);
@@ -186,7 +185,7 @@ public sealed class InstallScriptTests(PublishedFixture published)
 	}
 
 	[Fact]
-	public async Task Failed_current_swap_during_force_restores_the_previous_release()
+	public async Task Failed_current_swap_during_force_preserves_the_existing_release()
 	{
 		if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("Install tests require Linux.");
 
@@ -208,6 +207,7 @@ public sealed class InstallScriptTests(PublishedFixture published)
 			TestContext.Current.CancellationToken);
 
 		File.SetUnixFileMode(mv, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+		await File.WriteAllTextAsync(Path.Combine(source, "changed-file"), "different publish", TestContext.Current.CancellationToken);
 		var failed = await InstallAsync(day, source, "--force");
 		failed.ExitCode.ShouldBe(23, failed.Output + failed.Error);
 		(await File.ReadAllTextAsync(marker, TestContext.Current.CancellationToken)).ShouldBe("preserved");
