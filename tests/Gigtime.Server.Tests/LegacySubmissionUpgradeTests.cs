@@ -1,0 +1,180 @@
+using System.Text.Json;
+using Fisher;
+using Gigtime.Contracts.Tasks;
+using Gigtime.Domain.Catalogue;
+using Gigtime.Domain.Tasks;
+using Gigtime.Server.Hosting;
+using JasperFx;
+using JasperFx.Events;
+using JasperFx.Events.Documents;
+using JasperFx.Events.Projections;
+using Microsoft.Extensions.DependencyInjection;
+using Shouldly;
+using Xunit;
+
+namespace Gigtime.Server.Tests;
+
+public sealed class LegacySubmissionUpgradeTests
+{
+	private static readonly DateTimeOffset at = DateTimeOffset.Parse("2026-03-02T09:00:00Z",
+		System.Globalization.CultureInfo.InvariantCulture);
+
+	[Fact]
+	public async Task Legacy_stopped_and_backfilled_tasks_migrate_at_their_stop_with_original_figures_and_restart_is_a_noop()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-" + Guid.NewGuid().ToString("N"));
+		await SeedLegacyAsync(root);
+		await using var app = await ServiceHost.StartAsync(root);
+
+		foreach (var id in new[] { "aaaaaa", "bbbbbb" })
+		{
+			var task = (await app.GetAsync<TaskDto>($"/v1/tasks/{id}")).Data!;
+			task.State.ShouldBe("submitted");
+			task.Submission!.SubmittedAt.ShouldBe(task.StoppedAt!.Value);
+			task.Submission.SubmittedAt.ShouldBe(at.AddSeconds(40));
+			task.Submission.RoundedSeconds.ShouldBe(60);
+			task.Submission.Rate!.Amount.ShouldBe("120");
+			task.Submission.Currency.ShouldBe("GBP");
+			task.Submission.Amount!.Rounded.ShouldBe("2.00");
+		}
+
+		(await app.GetAsync<TaskDto>("/v1/tasks/cccccc")).Data!.State.ShouldBe("voided");
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Id.ShouldBe("dddddd");
+		(await app.GetAsync<TaskDto>("/v1/tasks/dddddd")).Data!.Submission.ShouldBeNull();
+		var before = await ExportAsync(app);
+		var exported = before.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonSerializer.Deserialize<JsonElement>(line));
+		exported.Count(e => e.GetProperty("type").GetString() == "task_submitted").ShouldBe(2);
+		before.ShouldContain("migration_applied");
+		before.ShouldContain("submit-legacy-stopped");
+		await app.RestartAsync();
+		(await ExportAsync(app)).ShouldBe(before);
+		await app.PostAsync<TaskDto>("/v1/tasks/aaaaaa/unsubmit");
+		var afterUnsubmit = await ExportAsync(app);
+		await app.RestartAsync();
+		(await ExportAsync(app)).ShouldBe(afterUnsubmit);
+		(await app.GetAsync<TaskDto>("/v1/tasks/aaaaaa")).Data!.State.ShouldBe("stopped");
+	}
+
+	[Fact]
+	public async Task Empty_store_records_one_marker_and_restart_does_not_repeat_it()
+	{
+		await using var app = await ServiceHost.StartAsync();
+		var before = await ExportAsync(app);
+
+		before
+			.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+			.Count(line => line.Contains("migration_applied", StringComparison.Ordinal))
+			.ShouldBe(1);
+
+		await app.RestartAsync();
+		(await ExportAsync(app)).ShouldBe(before);
+	}
+
+	[Fact]
+	public async Task Partial_migration_retry_skips_the_already_submitted_task_and_appends_only_missing_submission_and_marker()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-partial-" + Guid.NewGuid().ToString("N"));
+		await SeedLegacyAsync(root, partial: true);
+		await using var app = await ServiceHost.StartAsync(root);
+		var text = await ExportAsync(app);
+		var events = text.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonSerializer.Deserialize<JsonElement>(line));
+		events.Count(e => e.GetProperty("type").GetString() == "task_submitted").ShouldBe(2);
+		var factory = app.Host.Services.GetRequiredService<IDocumentSessionFactory>();
+		await using var query = factory.QuerySession();
+		var first = await query.Events.FetchStreamAsync("aaaaaa", token: TestContext.Current.CancellationToken);
+		first.Count(e => e.Data is TaskSubmitted).ShouldBe(1);
+	}
+
+	[Fact]
+	public async Task Migration_failure_prevents_host_startup_and_does_not_record_completion()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-fail-" + Guid.NewGuid().ToString("N"));
+		await SeedLegacyAsync(root, corrupt: true);
+
+		try
+		{
+			await Should.ThrowAsync<ArgumentException>(async () => await ServiceHost.StartAsync(root));
+			await using var store = OpenStore(root);
+			await using var query = store.QuerySession();
+
+			(await query.Events.FetchStreamAsync(LegacySubmissionUpgrade.StreamId, token: TestContext.Current.CancellationToken))
+				.ShouldBeEmpty();
+		}
+		finally
+		{
+			Directory.Delete(root, true);
+		}
+	}
+
+	private static async Task SeedLegacyAsync(string root, bool partial = false, bool corrupt = false)
+	{
+		await using var store = OpenStore(root);
+		await store.ApplyAllConfiguredChangesToDatabaseAsync(TestContext.Current.CancellationToken);
+		await using var session = store.LightweightSession();
+		var client = Guid.CreateVersion7();
+		var project = Guid.CreateVersion7();
+
+		session.Events.StartStream<CatalogueView>(CatalogueView.StreamId,
+			new DefaultsChanged("UTC"),
+			new ClientAdded(client, "legacy", "Legacy", "USD"),
+			new ProjectAdded(project, client, "work", null, 999m));
+
+		session.Events.StartStream<OpenTask>(OpenTask.StreamId, new OpenTaskSet("dddddd"));
+		var stopped = new TaskStopped(at.AddSeconds(40), corrupt ? "unsupported" : "nearest-minute", 120m, "GBP");
+		session.Events.StartStream<TaskView>("aaaaaa", new TaskStarted("aaaaaa", project, null, at), stopped);
+
+		session.Events.StartStream<TaskView>("bbbbbb",
+			new TaskRecorded("bbbbbb",
+				project,
+				null,
+				at,
+				at.AddSeconds(40),
+				"nearest-minute",
+				120m,
+				"GBP"));
+
+		session.Events.StartStream<TaskView>("cccccc",
+			new TaskRecorded("cccccc",
+				project,
+				null,
+				at,
+				at.AddSeconds(40),
+				"nearest-minute",
+				120m,
+				"GBP"),
+			new TaskVoided("duplicate"));
+
+		session.Events.StartStream<TaskView>("dddddd", new TaskStarted("dddddd", project, null, at));
+		await session.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+		if (!partial) return;
+
+		session.Events.Append("aaaaaa", new TaskSubmitted(at.AddSeconds(40), 60, "nearest-minute", 120m, "GBP"));
+		await session.SaveChangesAsync(TestContext.Current.CancellationToken);
+	}
+
+	private static DocumentStore OpenStore(string root)
+	{
+		var data = Path.Combine(root, "data", "gigtime");
+		Directory.CreateDirectory(data);
+
+		return DocumentStore.For(options =>
+		{
+			options.Connection("Data Source=" + Path.Combine(data, "gigtime.db"));
+			options.AutoCreateSchemaObjects = AutoCreate.All;
+			options.Events.StreamIdentity = StreamIdentity.AsString;
+			options.Events.EnableCorrelationId = true;
+			options.Events.AddEventType(typeof(MigrationApplied));
+			options.Projections.Add(new StoreRegistration.CatalogueProjection(), ProjectionLifecycle.Inline);
+			options.Projections.Add(new StoreRegistration.TrackerProjection(), ProjectionLifecycle.Inline);
+			options.Projections.Add(new StoreRegistration.TaskProjection(), ProjectionLifecycle.Inline);
+		});
+	}
+
+	private static async Task<string> ExportAsync(ServiceHost app)
+	{
+		var result = await app.Host.Scenario(s => s.Get.Url("/v1/export"));
+
+		return await result.ReadAsTextAsync();
+	}
+}

@@ -13,7 +13,7 @@ internal static class CommandCases
 	[
 		"defaults show", "defaults set", "client add", "client set", "client list", "client archive",
 		"project add", "project set", "project list", "project archive", "start", "pause", "resume", "stop", "status", "log", "show", "amend",
-		"add", "void", "report",
+		"add", "void", "submit", "unsubmit", "report",
 	];
 
 	internal static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture);
@@ -29,7 +29,7 @@ internal static class CommandCases
 		3661,
 		4500,
 		"01:15:00",
-		new("up:15", new("25.00", "GBP"), "GBP"),
+		null,
 		Start,
 		Start.AddSeconds(3661));
 
@@ -44,6 +44,7 @@ internal static class CommandCases
 			],
 			"add" => ["add", "example", "work", "--from", "2026-03-02T09:00", "--to", "10:00", "--ref", "backfill"],
 			"void" => ["void", "01JTASK", "--reason", "mistake"],
+			"submit" or "unsubmit" => [name, "01JTASK"],
 			"report" => ["report", "--range", "2026-03-01..2026-03-31", "--client", "example", "--project", "work"],
 
 			"defaults show" => ["defaults", "show"],
@@ -75,6 +76,7 @@ internal static class CommandCases
 			"amend" => ("POST", "/v1/tasks/01JTASK/amend"),
 			"add" => ("POST", "/v1/tasks/add"),
 			"void" => ("POST", "/v1/tasks/01JTASK/void"),
+			"submit" or "unsubmit" => ("POST", "/v1/tasks/01JTASK/" + name),
 			"report" => ("GET", "/v1/report?range=2026-03-01..2026-03-31&client=example&project=work"),
 
 			"defaults show" => ("GET", "/v1/defaults"),

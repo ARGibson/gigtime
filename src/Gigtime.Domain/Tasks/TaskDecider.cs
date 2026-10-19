@@ -12,6 +12,13 @@ public static class TaskDecider
 		ArgumentNullException.ThrowIfNull(catalogue);
 		ArgumentNullException.ThrowIfNull(command);
 
+		if (task.State == TaskState.Submitted)
+		{
+			return command is UnsubmitTask unsubmit
+				? Decision.Accept(new TaskUnsubmitted(TaskMath.Instant(unsubmit.At)))
+				: Transition(task, command);
+		}
+
 		if (command is StartTask start) return Start(task, tracker, catalogue, start);
 		if (command is RecordTask record) return Record(task, catalogue, record);
 
@@ -25,8 +32,10 @@ public static class TaskDecider
 			StopTask c when task.State is TaskState.Running or TaskState.Paused => Close(task, tracker, catalogue, c, c.At, true),
 			VoidTask c when task.State == TaskState.Stopped => Decision.Accept(new TaskVoided(c.Reason)),
 			AmendInterval c when task.State != TaskState.Voided => Amend(task, c),
-			ReassignTask c when task.State != TaskState.Voided => Reassign(catalogue, c),
+			ReassignTask c when task.State != TaskState.Voided => Reassign(task, catalogue, c),
 			ChangeTaskRef c when task.State != TaskState.Voided => Decision.Accept(new TaskRefChanged(c.Ref)),
+			SetTaskRate c when task.State != TaskState.Voided => SetRate(task, catalogue, c),
+			SubmitTask c when task.State == TaskState.Stopped => Submit(task, catalogue, c),
 			_ => Transition(task, command),
 		};
 	}
@@ -47,7 +56,17 @@ public static class TaskDecider
 		if (!TaskIds.IsValid(c.TaskId)) return Invalid(task, c, "Use a six-character lowercase hex task id.");
 		if (ProjectRefusal(catalogue, c.ProjectId, c) is { } error) return error;
 
-		return Decision.Accept(new TaskStarted(c.TaskId, c.ProjectId, c.Ref, TaskMath.Instant(c.At)), new OpenTaskSet(c.TaskId));
+		if (c.Rate < 0) return Invalid(task, c, "Task rate cannot be negative.");
+
+		var events = new List<object>
+		{
+			new TaskStarted(c.TaskId, c.ProjectId, c.Ref, TaskMath.Instant(c.At))
+		};
+
+		if (c.Rate is { } rate) events.Add(new TaskRateSet(rate, catalogue.Resolve(c.ProjectId).Currency));
+		events.Add(new OpenTaskSet(c.TaskId));
+
+		return Decision.Accept(events.ToArray());
 	}
 
 	private static Decision Record(TaskView task, CatalogueView catalogue, RecordTask c)
@@ -59,16 +78,16 @@ public static class TaskDecider
 
 		if (ProjectRefusal(catalogue, c.ProjectId, c) is { } error) return error;
 
-		var policy = catalogue.Resolve(c.ProjectId);
+		if (c.Rate < 0) return Invalid(task, c, "Task rate cannot be negative.");
 
-		return Decision.Accept(new TaskRecorded(c.TaskId,
-			c.ProjectId,
-			c.Ref,
-			TaskMath.Instant(c.Start),
-			TaskMath.Instant(c.End),
-			policy.Rounding,
-			policy.Rate,
-			policy.Currency));
+		var events = new List<object>
+		{
+			new TaskRecorded(c.TaskId, c.ProjectId, c.Ref, TaskMath.Instant(c.Start), TaskMath.Instant(c.End)),
+		};
+
+		if (c.Rate is { } rate) events.Add(new TaskRateSet(rate, catalogue.Resolve(c.ProjectId).Currency));
+
+		return Decision.Accept(events.ToArray());
 	}
 
 	private static Decision Close(TaskView task, OpenTask tracker, CatalogueView catalogue, TaskCommand c, DateTimeOffset instant, bool stop)
@@ -81,9 +100,44 @@ public static class TaskDecider
 		if (at < (last.End ?? last.Start)) return Invalid(task, c, "The instant precedes the last interval boundary.");
 		if (!stop) return Decision.Accept(new TaskPaused(at));
 
-		var policy = catalogue.Resolve(task.ProjectId);
+		if (c is StopTask { Submit: true })
+		{
+			if (RateCurrencyRefusal(task, catalogue, c) is { } refusal) return refusal;
 
-		return Decision.Accept(new TaskStopped(at, policy.Rounding, policy.Rate, policy.Currency), new OpenTaskCleared());
+			var figures = TaskFigures.Resolve(task, catalogue, at);
+
+			return Decision.Accept(new TaskStopped(at), Submitted(at, figures), new OpenTaskCleared());
+		}
+
+		return Decision.Accept(new TaskStopped(at), new OpenTaskCleared());
+	}
+
+	private static TaskSubmitted Submitted(DateTimeOffset at, TaskFigures figures)
+	{
+		return new(at, figures.RoundedSeconds, figures.Rounding, figures.Rate, figures.Currency);
+	}
+
+	private static Decision Submit(TaskView task, CatalogueView catalogue, SubmitTask c)
+	{
+		if (RateCurrencyRefusal(task, catalogue, c) is { } refusal) return refusal;
+
+		var at = TaskMath.Instant(c.At);
+
+		return Decision.Accept(Submitted(at, TaskFigures.Resolve(task, catalogue, at)));
+	}
+
+	private static Decision? RateCurrencyRefusal(TaskView task, CatalogueView catalogue, TaskCommand c)
+	{
+		return task.Rate is { } rate && rate.Currency != catalogue.Resolve(task.ProjectId).Currency
+			? Invalid(task, c, "The task rate currency differs from the client's currency; amend or clear the task rate first.")
+			: null;
+	}
+
+	private static Decision SetRate(TaskView task, CatalogueView catalogue, SetTaskRate c)
+	{
+		if (c.Rate < 0) return Invalid(task, c, "Task rate cannot be negative.");
+
+		return Decision.Accept(new TaskRateSet(c.Rate, c.Rate is null ? null : catalogue.Resolve(task.ProjectId).Currency));
 	}
 
 	private static Decision Resume(TaskView task, OpenTask tracker, ResumeTask c)
@@ -97,11 +151,19 @@ public static class TaskDecider
 		return Decision.Accept(new TaskResumed(at));
 	}
 
-	private static Decision Reassign(CatalogueView catalogue, ReassignTask c)
+	private static Decision Reassign(TaskView task, CatalogueView catalogue, ReassignTask c)
 	{
 		if (ProjectRefusal(catalogue, c.ProjectId, c) is { } error) return error;
+		if (c.Rate.IsSpecified && c.Rate.Value < 0) return Invalid(task, c, "Task rate cannot be negative.");
 
-		return Decision.Accept(new TaskReassigned(c.ProjectId));
+		var currency = catalogue.Resolve(c.ProjectId).Currency;
+
+		if (task.Rate is { } rate && rate.Currency != currency && !c.Rate.IsSpecified)
+			return Invalid(task, c, "Moving this task to another currency requires a new task rate or clearing its rate.");
+
+		return c.Rate.IsSpecified
+			? Decision.Accept(new TaskReassigned(c.ProjectId), new TaskRateSet(c.Rate.Value, c.Rate.Value is null ? null : currency))
+			: Decision.Accept(new TaskReassigned(c.ProjectId));
 	}
 
 	private static Decision Amend(TaskView task, AmendInterval c)
@@ -159,6 +221,8 @@ public static class TaskDecider
 	{
 		var hint = (task.State, c) switch
 		{
+			(TaskState.Submitted, _) => "gig unsubmit " + task.Id,
+			(TaskState.Running or TaskState.Paused, SubmitTask) => "gig stop --submit",
 			(TaskState.Running or TaskState.Paused, StartTask or RecordTask or VoidTask) => "gig stop",
 			(TaskState.Paused, PauseTask) => "gig resume",
 			(TaskState.Stopped or TaskState.Voided, StartTask or RecordTask) => null,

@@ -7,6 +7,7 @@ commands=(
   'defaults:global defaults' 'client:manage clients' 'project:manage projects'
   'start:start a task' 'pause:pause' 'resume:resume' 'stop:stop' 'status:show open task'
   'log:recent tasks' 'show:show a task' 'add:backfill' 'amend:correct a task'
+  'submit:fix a stopped task figure' 'unsubmit:allow corrections'
   'void:void a task' 'report:report totals' 'export:export events'
 )
 if (( CURRENT == 2 )); then
@@ -49,13 +50,14 @@ case "$words[2] $words[3]" in
       '--clear-rounding[inherit rounding]'); fi ;;
 esac
 case "$words[2]" in
-  start) flags+=('--ref[opaque reference]:reference:') ;;
-  add) flags+=('--from[start time]:time:' '--to[end time]:time:' '--ref[opaque reference]:reference:') ;;
+  start) flags+=('--ref[opaque reference]:reference:' '--rate[hourly rate]:amount:') ;;
+  add) flags+=('--from[start time]:time:' '--to[end time]:time:' '--ref[opaque reference]:reference:' '--rate[hourly rate]:amount:') ;;
   amend) flags+=('--interval[interval number]:number:' '--start[start time]:time:' '--end[end time]:time:'
     '--client[client key]:client:->live'
       '--project[project key]:project:->live'
       '--ref[opaque reference]:reference:'
-      '--clear-ref[clear reference]') ;;
+      '--clear-ref[clear reference]' '--rate[hourly rate]:amount:' '--clear-rate[inherit project rate]') ;;
+  stop) flags+=('--submit[submit when stopping]') ;;
   void) flags+=('--reason[reason]:reason:') ;;
   log) flags+=('--last[count]:number:'
     '--client[client key]:client:->live'
@@ -70,7 +72,7 @@ case "$words[2]" in
 esac
 _arguments -s $flags '*:argument:->live'
 [[ $state == live ]] || return
-local kind= client=
+local kind= client= task_state=
 case "$words[CURRENT-1]" in
   --client) kind=clients ;;
   --project) kind=projects
@@ -84,11 +86,14 @@ case "$words[CURRENT-1]" in
       client) [[ $words[3] != add && $CURRENT == 4 ]] && kind=clients ;;
       project) (( CURRENT == 4 )) && kind=clients
         if [[ $words[3] != add && $CURRENT == 5 ]]; then kind=projects; client=$words[4]; fi ;;
-      show|amend|void) (( CURRENT == 3 )) && kind=tasks ;;
+      show|amend|void|submit|unsubmit) (( CURRENT == 3 )) && kind=tasks ;;
     esac ;;
 esac
 [[ -n $kind ]] || return
+[[ $words[2] == submit ]] && task_state=stopped
+[[ $words[2] == unsubmit ]] && task_state=submitted
 local -a values
-if [[ -n $client ]]; then values=("${(@f)$(gig __complete "$kind" "$PREFIX" --client "$client")}")
+if [[ -n $task_state ]]; then values=("${(@f)$(gig __complete "$kind" "$PREFIX" --state "$task_state")}")
+elif [[ -n $client ]]; then values=("${(@f)$(gig __complete "$kind" "$PREFIX" --client "$client")}")
 else values=("${(@f)$(gig __complete "$kind" "$PREFIX")}"); fi
 (( $#values )) && compadd -- $values

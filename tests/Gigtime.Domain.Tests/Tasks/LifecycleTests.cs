@@ -10,7 +10,7 @@ public sealed class LifecycleTests
 	{
 		foreach (var state in Enum.GetValues<TaskState>())
 		{
-			foreach (var command in new[] { "start", "pause", "resume", "stop", "void", "add" })
+			foreach (var command in new[] { "start", "pause", "resume", "stop", "void", "add", "submit", "unsubmit" })
 				yield return [state, command];
 		}
 	}
@@ -30,6 +30,8 @@ public sealed class LifecycleTests
 			"resume" => new ResumeTask(at),
 			"stop" => new StopTask(at),
 			"void" => new VoidTask(),
+			"submit" => new SubmitTask(at),
+			"unsubmit" => new UnsubmitTask(at),
 			"add" => new RecordTask("7f3a9c", s.Catalogue.ProjectId, null, at, at.AddMinutes(1)),
 			_ => throw new InvalidOperationException()
 		};
@@ -40,7 +42,8 @@ public sealed class LifecycleTests
 			"pause" => state == TaskState.Running,
 			"resume" => state == TaskState.Paused,
 			"stop" => state is TaskState.Running or TaskState.Paused,
-			"void" => state == TaskState.Stopped,
+			"void" or "submit" => state == TaskState.Stopped,
+			"unsubmit" => state == TaskState.Submitted,
 			_ => false
 		};
 
@@ -58,10 +61,13 @@ public sealed class LifecycleTests
 			var expectedHint = (state, command) switch
 			{
 				(TaskState.Missing, _) => "gig start",
+				(TaskState.Submitted, _) => "gig unsubmit " + s.Task.Id,
+				(TaskState.Running or TaskState.Paused, "submit") => "gig stop --submit",
 				(TaskState.Running or TaskState.Paused, "void" or "start" or "add") => "gig stop",
 				(TaskState.Paused, "pause") => "gig resume",
 				(TaskState.Stopped or TaskState.Voided, "start" or "add") => null,
-				(TaskState.Stopped or TaskState.Voided, _) => "gig start",
+				(TaskState.Stopped, "pause" or "resume" or "stop") => "gig start",
+				(TaskState.Voided, _) => "gig start",
 				_ => null
 			};
 
@@ -129,7 +135,7 @@ public sealed class LifecycleTests
 
 		s.Task.Intervals.Select(x => x.Number).ShouldBe([1, 2]);
 		s.Task.RawSeconds.ShouldBe(40);
-		s.Task.RoundedSeconds.ShouldBe(60);
+		s.Figures.RoundedSeconds.ShouldBe(60);
 		s.Task.State.ShouldBe(TaskState.Stopped);
 		s.Tracker.TaskId.ShouldBeNull();
 	}
@@ -153,7 +159,7 @@ public sealed class LifecycleTests
 			s.Send(new ResumeTask(TaskScenario.At.AddSeconds(2)));
 			s.Send(new StopTask(TaskScenario.At.AddSeconds(32)));
 			s.Task.Intervals.Single().Number.ShouldBe(2);
-			s.Task.RoundedSeconds.ShouldBe(60);
+			s.Figures.RoundedSeconds.ShouldBe(60);
 		}
 	}
 
@@ -191,10 +197,12 @@ public sealed class LifecycleTests
 		task.State.ShouldBe(s.Task.State);
 		task.Timeline.ShouldBe(s.Task.Timeline);
 		task.Snapshot.ShouldBe(s.Task.Snapshot);
+		task.Rate.ShouldBe(s.Task.Rate);
+		task.Submission.ShouldBe(s.Task.Submission);
 		task.StartedAt.ShouldBe(s.Task.StartedAt);
 		task.StoppedAt.ShouldBe(s.Task.StoppedAt);
 		task.RawSeconds.ShouldBe(s.Task.RawSeconds);
-		task.RoundedSeconds.ShouldBe(s.Task.RoundedSeconds);
+		TaskFigures.Resolve(task, s.Catalogue.State, TaskScenario.At).ShouldBe(s.Figures);
 		tracker.TaskId.ShouldBe(s.Tracker.TaskId);
 	}
 }

@@ -1,10 +1,17 @@
 using Gigtime.Contracts.Catalogue;
+using Gigtime.Contracts.Reporting;
 
 namespace Gigtime.Contracts.Tasks;
 
 public sealed record IntervalDto(int Number, DateTimeOffset Start, DateTimeOffset? End);
 
-public sealed record PolicySnapshotDto(string Rounding, MoneyDto? Rate, string Currency);
+public sealed record SubmissionDto(
+	DateTimeOffset SubmittedAt,
+	long RoundedSeconds,
+	string Rounding,
+	MoneyDto? Rate,
+	string Currency,
+	EarningsDto? Amount);
 
 public sealed record TaskDto(
 	string Id,
@@ -16,10 +23,11 @@ public sealed record TaskDto(
 	long RawSeconds,
 	long RoundedSeconds,
 	string Display,
-	PolicySnapshotDto? Snapshot,
+	SubmissionDto? Submission,
 	DateTimeOffset StartedAt,
 	DateTimeOffset? StoppedAt,
-	string Timezone = "UTC");
+	string Timezone = "UTC",
+	MoneyDto? Rate = null);
 
 public sealed record TasksDto(IReadOnlyList<TaskDto> Tasks);
 

@@ -12,6 +12,7 @@ internal sealed class TaskScenario
 
 	public CatalogueScenario Catalogue { get; } = new();
 	public TaskView Task { get; } = new();
+	public TaskFigures Figures => TaskFigures.Resolve(Task, Catalogue.State, At);
 	public OpenTask Tracker { get; } = new();
 	public List<object> TaskEvents { get; } = [];
 	public List<object> TrackerEvents { get; } = [];
@@ -65,5 +66,6 @@ internal sealed class TaskScenario
 
 		Send(new StopTask(At.AddSeconds(30)));
 		if (state == TaskState.Voided) Send(new VoidTask());
+		if (state == TaskState.Submitted) Send(new SubmitTask(At.AddSeconds(40)));
 	}
 }

@@ -18,7 +18,7 @@ $ gig report --week
 
 Starting and stopping has to be instant, or you stop doing it. `gig` is a native binary that starts in about 7 ms, and zsh completion fills in your clients, projects and recent task ids from your own data.
 
-It does the arithmetic the way an invoice needs it. Each client has a currency and timezone, and each project an hourly rate. A task's total is rounded once, to the nearest minute, and the task keeps the rate and rules in force when you stopped it, so raising your rate next month doesn't rewrite last month's numbers.
+It does the arithmetic the way an invoice needs it. Each client has a currency and timezone, and each project an hourly rate. A task's total is rounded once, to the nearest minute, and submission fixes the task's rate and rules, so raising your rate later doesn't rewrite a submitted figure. Until then, the figures stay provisional.
 
 Mistakes are cheap to fix. Forgot to stop? `gig amend` corrects the times. Forgot to start? `gig add` backfills the task. Logged it to the wrong project? Reassign it. Every change is recorded as a new event rather than overwriting the old one, so the history stays honest.
 
@@ -199,9 +199,10 @@ gig log
 ```
 
 There can be one open task. Pause closes its current interval; resume opens another.
-Stop closes the task and snapshots its rate, currency and rounding policy. Corrections
-use that snapshot, even after a rate changes. `add` backfills a stopped task without
-changing the open task. `void` preserves history while excluding a task from reports
+Stop closes the task and leaves its figures provisional. `gig submit <task>` fixes the
+rounded total, rate and currency at submission; `gig stop --submit` does both together.
+Submitted tasks refuse corrections and voiding until `gig unsubmit <task>` returns them
+to stopped. `add` backfills a stopped task without changing the open task. `void` preserves history while excluding a task from reports
 and the default log. `log --all` includes voided tasks.
 
 Times accept ISO 8601 instants or local date-times, and `HH:mm` for today in the client's
@@ -229,14 +230,16 @@ prints plain candidates. Options requiring values reject an omitted value.
 | `gig project set` | `gig project set acme work --key build --name Build --clear-rate --clear-rounding` |
 | `gig project list` | `gig project list acme --all` (omit the client to list all clients) |
 | `gig project archive` | `gig project archive acme build` |
-| `gig start` | `gig start acme work --ref opaque-42` |
+| `gig start` | `gig start acme work --ref opaque-42 --rate 45` |
 | `gig pause` | `gig pause` |
 | `gig resume` | `gig resume` |
-| `gig stop` | `gig stop` |
+| `gig stop` | `gig stop --submit` |
+| `gig submit` | `gig submit abcdef` |
+| `gig unsubmit` | `gig unsubmit abcdef` |
 | `gig status` | `gig status --json` |
 | `gig log` | `gig log --last 20 --client acme --project work --all` |
 | `gig show` | `gig show abcdef` |
-| `gig add` | `gig add acme work --from 2026-03-02T09:00:00Z --to 2026-03-02T10:00:00Z --ref opaque-42` |
+| `gig add` | `gig add acme work --from 2026-03-02T09:00:00Z --to 2026-03-02T10:00:00Z --ref opaque-42 --rate 45` |
 | `gig amend` | `gig amend abcdef --interval 1 --start 09:00 --end 10:15` |
 | `gig void` | `gig void abcdef --reason duplicate` |
 | `gig report` | `gig report --range 2026-03-01..2026-03-31 --client acme --project work` |
@@ -245,10 +248,17 @@ prints plain candidates. Options requiring values reject an omitted value.
 Client `set` also accepts `--timezone` and `--rounding`; project `set` accepts `--rate`
 and `--rounding`. A value flag and its `--clear-*` counterpart cannot be combined.
 `amend` also accepts `--client acme --project work` together, `--ref opaque-43` or
-`--clear-ref`. Time corrections require `--interval` and at least one time flag.
+`--clear-ref`, and `--rate 45` or `--clear-rate`. Time corrections require `--interval` and at least one time flag.
 `report` selects one of `--week` (default), `--month`, or inclusive local dates with
 `--range`. Export date-only bounds include the entire UTC date. Task ids are six
-lowercase hexadecimal characters; `show`, `amend` and `void` accept an unambiguous prefix.
+lowercase hexadecimal characters; `show`, `amend`, `void`, `submit` and `unsubmit` accept an unambiguous prefix.
+Completion offers stopped tasks for `submit` and submitted tasks for `unsubmit`.
+
+A task's own `--rate` overrides the project rate and records the client currency.
+Moving it to a client with another currency requires `--rate` or `--clear-rate` in the
+same amendment. If that client's currency changes later, submission refuses until the
+own rate is replaced or cleared. Unsubmitted figures use the current task or project
+rate and catalogue rounding; submission fixes them until the task is unsubmitted.
 
 The supported time-rounding policy is `nearest-minute` (half a minute rounds up).
 Settings inherit from defaults to client to project. Report amounts stay separate per
@@ -294,9 +304,9 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Entity (nested client/project) | `id`, `key` |
 | Money (rate) | `amount`, `currency` |
 | Acknowledgement (archive) | `id` (nullable) |
-| Task (start/pause/resume/stop/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `snapshot`, `started_at`, `stopped_at`, `timezone` |
+| Task (start/pause/resume/stop/submit/unsubmit/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `submission`, `started_at`, `stopped_at`, `timezone`, `rate` (own rate, nullable) |
 | Interval | `number`, `start`, `end` (nullable while running) |
-| Policy snapshot (nullable until stop) | `rounding`, `rate` (nullable), `currency` |
+| Submission (nullable until submitted) | `submitted_at`, `rounded_seconds`, `rounding`, `rate` (nullable), `currency`, `amount` (nullable Earnings) |
 | Status | `task` (null when no task is open), `instance` (null for default) |
 | Log | `tasks` array |
 | Report | `totals`, `clients` arrays |
@@ -307,7 +317,7 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Health (`/v1/health`, inspected by setup) | `status` |
 | Export event (one object per line, no success envelope) | `sequence`, `type`, `stream`, `version`, `timestamp`, `correlation_id`, `data` |
 
-Task `state` is `running`, `paused`, `stopped` or `voided`. `display` is `HH:mm:ss`
+Task `state` is `running`, `paused`, `stopped`, `submitted` or `voided`. `display` is `HH:mm:ss`
 (hours can exceed 24). Export `data` is the event payload; its schema follows the event
 `type`, including catalogue changes and task lifecycle/correction events. Export orders
 by global `sequence`, including void events. It streams bounded pages rather than
@@ -336,12 +346,21 @@ omitted/cleared distinction. Current event shapes are:
 | TaskPaused / TaskResumed | `at` |
 | TaskStopped | `at`, `rounding`, `rate`, `currency` |
 | TaskRecorded | `task_id`, `project_id`, `ref`, `start`, `end`, `rounding`, `rate`, `currency` |
+| TaskSubmitted | `at`, `rounded_seconds`, `rounding`, `rate`, `currency` |
+| TaskUnsubmitted | `at` |
+| TaskRateSet | `rate`, `currency` (both nullable to clear the own rate) |
+| MigrationApplied | `name` |
 | IntervalAmended | `interval`, `start`, `end` |
 | TaskReassigned | `project_id` |
 | TaskRefChanged | `ref` |
 | TaskVoided | `reason` |
 | OpenTaskSet | `task_id` |
 | OpenTaskCleared | empty object |
+
+New `TaskStopped` and `TaskRecorded` events leave `rounding`, `rate` and `currency` null.
+Legacy events retain these fields. On upgrade, stopped tasks with legacy figures gain
+`TaskSubmitted` at their original stop instant; open and voided tasks keep their states.
+The `MigrationApplied` marker records completion, including for an empty store.
 
 ## Exit codes
 

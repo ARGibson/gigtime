@@ -16,6 +16,7 @@ internal static class CorrectionCommands
 		Time(add, "from", true);
 		Time(add, "to", true);
 		Text(add, "ref");
+		Text(add, "rate");
 
 		add.SetAction((r, ct) => exchange.WriteAsync(r,
 			"add",
@@ -25,12 +26,13 @@ internal static class CorrectionCommands
 				r.GetValue<string>("project")!,
 				r.GetValue<string>("--from")!,
 				r.GetValue<string>("--to")!,
-				r.GetValue<string>("--ref")),
+				r.GetValue<string>("--ref"),
+				r.GetValue<string>("--rate")),
 			GigtimeJsonContext.Default.RecordTaskInput,
 			GigtimeJsonContext.Default.TaskResponse,
 			ct));
 
-		var amend = Add(root, "amend", "Correct a task using its existing policy snapshot.");
+		var amend = Add(root, "amend", "Correct an unsubmitted task.");
 		Argument(amend, "task");
 
 		var interval = new Option<int?>("--interval")
@@ -45,6 +47,7 @@ internal static class CorrectionCommands
 		Text(amend, "client");
 		Text(amend, "project");
 		Exclusive(amend, "ref", "clear-ref");
+		Exclusive(amend, "rate", "clear-rate");
 
 		amend.Validators.Add(result =>
 		{
@@ -62,7 +65,8 @@ internal static class CorrectionCommands
 				result.AddError("Supply both --client and --project.");
 
 			if (!hasTime && result.GetValue<string>("--client") is null && result.GetValue<string>("--ref") is null
-					&& !result.GetValue<bool>("--clear-ref"))
+					&& !result.GetValue<bool>("--clear-ref") && result.GetValue<string>("--rate") is null
+					&& !result.GetValue<bool>("--clear-rate"))
 			{
 				result.AddError("Supply a correction.");
 			}
@@ -78,7 +82,9 @@ internal static class CorrectionCommands
 				r.GetValue<string>("--client"),
 				r.GetValue<string>("--project"),
 				r.GetValue<string>("--ref"),
-				r.GetValue<bool>("--clear-ref")),
+				r.GetValue<bool>("--clear-ref"),
+				r.GetValue<string>("--rate"),
+				r.GetValue<bool>("--clear-rate")),
 			GigtimeJsonContext.Default.AmendTaskInput,
 			GigtimeJsonContext.Default.TaskResponse,
 			ct));

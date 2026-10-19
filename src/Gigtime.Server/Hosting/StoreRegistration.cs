@@ -44,6 +44,7 @@ public static class StoreRegistration
 				options.AutoCreateSchemaObjects = AutoCreate.All;
 				options.Events.StreamIdentity = StreamIdentity.AsString;
 				options.Events.EnableCorrelationId = true;
+				options.Events.AddEventType(typeof(MigrationApplied));
 				options.Projections.Add(new CatalogueProjection(), ProjectionLifecycle.Inline);
 				options.Projections.Add(new TrackerProjection(), ProjectionLifecycle.Inline);
 				options.Projections.Add(new TaskProjection(), ProjectionLifecycle.Inline);
@@ -92,6 +93,9 @@ public static class StoreRegistration
 		public void Apply(TaskPaused e, TaskView state) => state.Apply(e);
 		public void Apply(TaskResumed e, TaskView state) => state.Apply(e);
 		public void Apply(TaskStopped e, TaskView state) => state.Apply(e);
+		public void Apply(TaskRateSet e, TaskView state) => state.Apply(e);
+		public void Apply(TaskUnsubmitted e, TaskView state) => state.Apply(e);
+		public void Apply(TaskSubmitted e, TaskView state) => state.Apply(e);
 		public void Apply(TaskRecorded e, TaskView state) => state.Apply(e);
 		public void Apply(IntervalAmended e, TaskView state) => state.Apply(e);
 		public void Apply(TaskReassigned e, TaskView state) => state.Apply(e);

@@ -47,7 +47,7 @@ public sealed partial class ReadmeTests
 			("Defaults", typeof(DefaultsDto)), ("Client", typeof(ClientDto)), ("Project", typeof(ProjectDto)),
 			("Client list", typeof(ClientsDto)), ("Project list", typeof(ProjectsDto)), ("Entity", typeof(EntityDto)),
 			("Money", typeof(MoneyDto)), ("Task", typeof(TaskDto)), ("Interval", typeof(IntervalDto)),
-			("Policy snapshot", typeof(PolicySnapshotDto)), ("Log", typeof(TasksDto)), ("Status", typeof(StatusDto)),
+			("Submission", typeof(SubmissionDto)), ("Log", typeof(TasksDto)), ("Status", typeof(StatusDto)),
 			("Report", typeof(ReportDto)), ("Project report total", typeof(ReportTotalDto)),
 			("Client/currency report total", typeof(ClientReportTotalDto)), ("Earnings", typeof(EarningsDto)),
 			("Acknowledgement", typeof(AcknowledgementDto)), ("Health", typeof(HealthDto)), ("Setup/check", typeof(SetupDto)),

@@ -8,7 +8,7 @@ namespace Gigtime.Domain.Tests.Tasks;
 public sealed class CorrectionTests
 {
 	[Fact]
-	public void Amendments_reject_overlap_and_keep_snapshot_after_catalogue_changes()
+	public void Amendments_reject_overlap_and_provisional_figures_follow_catalogue_changes()
 	{
 		var s = new TaskScenario();
 		s.Start();
@@ -18,9 +18,10 @@ public sealed class CorrectionTests
 		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(999m)));
 		s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Currency: Change.Set("EUR")));
 
-		s.Task.RoundedSeconds.ShouldBe(60);
-		s.Task.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
-		TaskMath.Earnings(s.Task).ShouldBe(2m);
+		s.Figures.RoundedSeconds.ShouldBe(60);
+		s.Task.Snapshot.ShouldBeNull();
+		s.Figures.Currency.ShouldBe("EUR");
+		s.Figures.Earnings.ShouldBe(999m / 60m);
 
 		var overlap = s.Decide(new AmendInterval(1, End: TaskScenario.At.AddSeconds(41)));
 
@@ -34,12 +35,12 @@ public sealed class CorrectionTests
 		s.Send(new AmendInterval(2, End: TaskScenario.At.AddSeconds(100)));
 
 		s.Task.RawSeconds.ShouldBe(100);
-		s.Task.RoundedSeconds.ShouldBe(120);
-		TaskMath.Earnings(s.Task).ShouldBe(4m);
+		s.Figures.RoundedSeconds.ShouldBe(120);
+		s.Figures.Earnings.ShouldBe(999m / 30m);
 	}
 
 	[Fact]
-	public void Backfill_does_not_claim_the_open_task_and_freezes_policy()
+	public void Backfill_does_not_claim_the_open_task_and_leaves_figures_provisional()
 	{
 		var s = new TaskScenario();
 		s.Start();
@@ -57,7 +58,8 @@ public sealed class CorrectionTests
 
 		recorded.State.ShouldBe(TaskState.Stopped);
 		recorded.RawSeconds.ShouldBe(3600);
-		recorded.Snapshot.ShouldBe(new("nearest-minute", 120m, "USD"));
+		recorded.Snapshot.ShouldBeNull();
+		TaskFigures.Resolve(recorded, s.Catalogue.State, TaskScenario.At).Rate.ShouldBe(120m);
 		s.Tracker.TaskId.ShouldBe(s.Task.Id);
 	}
 
@@ -99,7 +101,7 @@ public sealed class CorrectionTests
 	}
 
 	[Fact]
-	public void Reassignment_and_ref_clear_preserve_the_stopped_snapshot()
+	public void Reassignment_and_ref_clear_resolve_the_destination_project_policy()
 	{
 		var s = new TaskScenario();
 		s.Reach(TaskState.Stopped);
@@ -110,7 +112,8 @@ public sealed class CorrectionTests
 
 		s.Task.ProjectId.ShouldBe(project);
 		s.Task.Ref.ShouldBeNull();
-		s.Task.Snapshot!.Rate.ShouldBe(120m);
+		s.Task.Snapshot.ShouldBeNull();
+		s.Figures.Rate.ShouldBe(999m);
 
 		s.Send(new VoidTask());
 

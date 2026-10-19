@@ -11,10 +11,20 @@ public static class StopTaskEndpoint
 		DateTimeOffset now,
 		CancellationToken cancellationToken)
 	{
-		return TaskWrites.LoadAsync(events, context, (_, _) => new StopTask(now), false, cancellationToken);
+		return TaskWrites.LoadAsync(events,
+			context,
+			(_, _) => new StopTask(now, bool.TryParse(context.Request.Query["submit"], out var submit) && submit),
+			false,
+			cancellationToken);
 	}
 
-	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded) => EnvelopeResult.From(loaded.Decision, loaded.Tracker.TaskId);
+	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded, [NotBody] HttpContext context)
+	{
+		if (context.Request.Query.TryGetValue("submit", out var value) && !bool.TryParse(value, out _))
+			return new("stop", new("validation", "submit must be true or false."));
+
+		return EnvelopeResult.From(loaded.Decision, loaded.Tracker.TaskId);
+	}
 
 	[WolverinePost("/v1/tasks/stop")]
 	public static (Envelope<TaskDto>, AppendEvents, AppendEvents) Handle([NotBody] LoadedTaskCommand loaded, DateTimeOffset now)

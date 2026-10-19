@@ -47,6 +47,7 @@ builder.Services.AddExceptionHandler<CommandExceptions>();
 builder.Services.AddSingleton<IProblemDetailsWriter, EnvelopeProblems>();
 builder.Services.AddProblemDetails();
 builder.Services.AddGigtimeStore();
+builder.Services.AddHostedService<LegacySubmissionUpgrade>();
 builder.ListenOnGigtimeSocket();
 
 builder.Host.UseWolverine(options =>

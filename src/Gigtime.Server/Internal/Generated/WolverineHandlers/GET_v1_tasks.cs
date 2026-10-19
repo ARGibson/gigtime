@@ -61,8 +61,9 @@ namespace Internal.Generated.WolverineHandlers
 
             var client = httpContext.Request.Query["client"];
             var project = httpContext.Request.Query["project"];
-            var loadedTaskList = await Gigtime.Server.Tasks.ListTasksEndpoint.LoadAsync(documentReadOperations, httpContext.RequestAborted, all, client, project).ConfigureAwait(false);
-            var result1 = Gigtime.Server.Tasks.ListTasksEndpoint.Validate(loadedTaskList, last, client, project);
+            var state = httpContext.Request.Query["state"];
+            var loadedTaskList = await Gigtime.Server.Tasks.ListTasksEndpoint.LoadAsync(documentReadOperations, httpContext.RequestAborted, all, client, project, state).ConfigureAwait(false);
+            var result1 = Gigtime.Server.Tasks.ListTasksEndpoint.Validate(loadedTaskList, last, client, project, state);
             // Evaluate whether or not the execution should be stopped based on the IResult value
             if (result1 != null && !(result1 is Wolverine.Http.WolverineContinue))
             {
@@ -72,7 +73,7 @@ namespace Internal.Generated.WolverineHandlers
 
             
             // The actual HTTP request handler execution
-            var envelopeOfTasksDto_response = Gigtime.Server.Tasks.ListTasksEndpoint.Handle(loadedTaskList, dateTimeOffset, last, all, client, project);
+            var envelopeOfTasksDto_response = Gigtime.Server.Tasks.ListTasksEndpoint.Handle(loadedTaskList, dateTimeOffset, last, all, client, project, state);
 
             // Writing the response body to JSON because this was the first 'return variable' in the method signature
             await WriteJsonAsync(httpContext, envelopeOfTasksDto_response, 404);

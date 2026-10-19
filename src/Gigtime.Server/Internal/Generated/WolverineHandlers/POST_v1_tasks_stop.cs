@@ -36,7 +36,7 @@ namespace Internal.Generated.WolverineHandlers
             System.Diagnostics.Activity.Current?.SetTag("handler.type", "Gigtime.Server.Tasks.StopTaskEndpoint");
             var dateTimeOffset = _timeProvider.GetUtcNow();
             var loadedTaskCommand = await Gigtime.Server.Tasks.StopTaskEndpoint.LoadAsync(eventStoreOperations, httpContext, dateTimeOffset, httpContext.RequestAborted).ConfigureAwait(false);
-            var result1 = Gigtime.Server.Tasks.StopTaskEndpoint.Validate(loadedTaskCommand);
+            var result1 = Gigtime.Server.Tasks.StopTaskEndpoint.Validate(loadedTaskCommand, httpContext);
             // Evaluate whether or not the execution should be stopped based on the IResult value
             if (result1 != null && !(result1 is Wolverine.Http.WolverineContinue))
             {

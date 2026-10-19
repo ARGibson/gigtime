@@ -10,12 +10,16 @@ public sealed class TaskView
 	public string? Ref { get; set; }
 	public TaskState State { get; set; }
 	public List<Interval> Timeline { get; init; } = [];
+
 	public IReadOnlyList<Interval> Intervals => Timeline.Where(i => i.End is null || i.End > i.Start).ToArray();
+
+	// #34: retained only to recognise legacy events for the one-off submission migration.
 	public PolicySnapshot? Snapshot { get; set; }
+	public TaskRate? Rate { get; set; }
+	public TaskSubmission? Submission { get; set; }
 	public DateTimeOffset? StartedAt { get; set; }
 	public DateTimeOffset? StoppedAt { get; set; }
 	public long RawSeconds => Timeline.Sum(i => i.Seconds);
-	public long RoundedSeconds => Snapshot is null ? RawSeconds : TaskMath.Round(RawSeconds, Snapshot.Rounding);
 
 	public long RawSecondsAt(DateTimeOffset now)
 	{
@@ -54,7 +58,7 @@ public sealed class TaskView
 		if (State == TaskState.Running) Close(e.At);
 		State = TaskState.Stopped;
 		StoppedAt = e.At;
-		Snapshot = new(e.Rounding, e.Rate, e.Currency);
+		Snapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
 	}
 
 	public void Apply(TaskRecorded e)
@@ -65,10 +69,24 @@ public sealed class TaskView
 		State = TaskState.Stopped;
 		StartedAt = e.Start;
 		StoppedAt = e.End;
-		Snapshot = new(e.Rounding, e.Rate, e.Currency);
+		Snapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
 
 		Timeline.Add(new(1, e.Start, e.End));
 	}
+
+	public void Apply(TaskSubmitted e)
+	{
+		Submission = new(e.At, e.RoundedSeconds, e.Rounding, e.Rate, e.Currency);
+		State = TaskState.Submitted;
+	}
+
+	public void Apply(TaskUnsubmitted _)
+	{
+		Submission = null;
+		State = TaskState.Stopped;
+	}
+
+	public void Apply(TaskRateSet e) => Rate = e.Rate is { } amount && e.Currency is { } currency ? new(amount, currency) : null;
 
 	public void Apply(IntervalAmended e)
 	{
@@ -122,6 +140,18 @@ public sealed class TaskView
 
 				break;
 			case TaskRefChanged x:
+				Apply(x);
+
+				break;
+			case TaskSubmitted x:
+				Apply(x);
+
+				break;
+			case TaskUnsubmitted x:
+				Apply(x);
+
+				break;
+			case TaskRateSet x:
 				Apply(x);
 
 				break;
