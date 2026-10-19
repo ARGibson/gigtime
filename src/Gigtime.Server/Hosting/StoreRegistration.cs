@@ -57,8 +57,9 @@ public static class StoreRegistration
 					if (await session.Events.FetchStreamStateAsync(CatalogueView.StreamId, token) is null)
 					{
 						// #35: BCL discovers only the host's id; bundled TZDB supplies every timezone rule.
-						var timezone = TimeZones.Get(TimeZoneInfo.Local.Id);
-						session.Events.StartStream<CatalogueView>(CatalogueView.StreamId, new DefaultsChanged(timezone.Id));
+						var hostId = provider.GetRequiredService<TimeProvider>().LocalTimeZone.Id;
+						var timezone = DefaultTimezone.FromHost(hostId);
+						session.Events.StartStream<CatalogueView>(CatalogueView.StreamId, new DefaultsChanged(timezone));
 					}
 
 					if (await session.Events.FetchStreamStateAsync(OpenTask.StreamId, token) is null)
