@@ -43,8 +43,8 @@ public sealed class SubmissionTests(PublishedFixture published)
 		var logged = (await day.SuccessAsync("log")).GetProperty("tasks").EnumerateArray().Single();
 		logged.GetProperty("state").GetString().ShouldBe("submitted");
 		logged.GetProperty("submission").GetRawText().ShouldBe(first.GetRawText());
-		var report = await day.SuccessAsync("report", "--range", "2026-03-02..2026-03-02");
-		report.GetProperty("totals")[0].GetProperty("estimated_earnings").GetProperty("rounded").GetString().ShouldBe("30.00");
+		var report = await day.SuccessAsync("report");
+		report.GetProperty("totals")[0].GetProperty("amount").GetProperty("rounded").GetString().ShouldBe("30.00");
 		(await day.HumanAsync("show", id)).Output.ShouldContain("Submission amount: 30.00 GBP");
 
 		var beforeRefusal = await day.GigAsync("export");

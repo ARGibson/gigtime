@@ -39,6 +39,10 @@ internal sealed class HumanOutput
 
 		switch (data)
 		{
+			case TimesheetDto timesheet:
+				Timesheet(timesheet);
+
+				break;
 			case ReportDto report:
 				Report(report);
 
@@ -89,19 +93,44 @@ internal sealed class HumanOutput
 
 	private void Report(ReportDto report)
 	{
-		Table(["Client", "Project", "Currency", "Raw", "Rounded", "Estimated earnings"],
+		Table(["Client", "Project", "Currency", "Raw", "Rounded", "Amount"],
 			report.Totals.Select(t => new[]
 			{
 				t.Client.Key, t.Project.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
-				t.EstimatedEarnings?.Rounded ?? "not rated",
+				t.Amount?.Rounded ?? "not rated",
 			}));
 
-		Table(["Client total", "Currency", "Raw", "Rounded", "Estimated earnings"],
+		Table(["Client total", "Currency", "Raw", "Rounded", "Amount"],
 			report.Clients.Select(t => new[]
 			{
 				t.Client.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
-				t.EstimatedEarnings?.Rounded ?? "not rated",
+				t.Amount?.Rounded ?? "not rated",
 			}));
+
+		console.WriteLine("Unsubmitted (provisional)");
+
+		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded", "Provisional amount"],
+			report.Unsubmitted.Select(t => new[]
+			{
+				t.TaskId, t.Client.Key, t.Project.Key, t.Ref ?? "", t.State, DurationText.Format(t.RawSeconds),
+				DurationText.Format(t.RoundedSeconds), t.Amount is { } amount ? amount.Rounded + " " + amount.Currency : "not rated",
+			}));
+	}
+
+	private void Timesheet(TimesheetDto timesheet)
+	{
+		foreach (var day in timesheet.Days)
+		{
+			console.WriteLine(day.Date + "  " + DurationText.Format(day.RawSeconds));
+
+			Table(["Id", "Client", "Project", "Ref", "Time"],
+				day.Tasks.Select(t => new[] { t.TaskId, t.Client.Key, t.Project.Key, t.Ref ?? "", DurationText.Format(t.RawSeconds), }));
+		}
+
+		Table(["Client", "Project", "Period time"],
+			timesheet.Projects.Select(t => new[] { t.Client.Key, t.Project.Key, DurationText.Format(t.RawSeconds), }));
+
+		Table(["Client total", "Period time"], timesheet.Clients.Select(t => new[] { t.Client.Key, DurationText.Format(t.RawSeconds), }));
 	}
 
 	private void Clients(IEnumerable<ClientDto> clients)

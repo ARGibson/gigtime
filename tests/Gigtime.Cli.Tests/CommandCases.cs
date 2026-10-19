@@ -13,7 +13,7 @@ internal static class CommandCases
 	[
 		"defaults show", "defaults set", "client add", "client set", "client list", "client archive",
 		"project add", "project set", "project list", "project archive", "start", "pause", "resume", "stop", "status", "log", "show", "amend",
-		"add", "void", "submit", "unsubmit", "report",
+		"add", "void", "submit", "unsubmit", "report", "timesheet",
 	];
 
 	internal static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture);
@@ -45,7 +45,7 @@ internal static class CommandCases
 			"add" => ["add", "example", "work", "--from", "2026-03-02T09:00", "--to", "10:00", "--ref", "backfill"],
 			"void" => ["void", "01JTASK", "--reason", "mistake"],
 			"submit" or "unsubmit" => [name, "01JTASK"],
-			"report" => ["report", "--range", "2026-03-01..2026-03-31", "--client", "example", "--project", "work"],
+			"report" or "timesheet" => [name, "--range", "2026-03-01..2026-03-31", "--client", "example", "--project", "work"],
 
 			"defaults show" => ["defaults", "show"],
 			"defaults set" => ["defaults", "set", "--timezone", "Europe/London", "--week-starts", "Monday", "--rounding", "up:15"],
@@ -77,7 +77,7 @@ internal static class CommandCases
 			"add" => ("POST", "/v1/tasks/add"),
 			"void" => ("POST", "/v1/tasks/01JTASK/void"),
 			"submit" or "unsubmit" => ("POST", "/v1/tasks/01JTASK/" + name),
-			"report" => ("GET", "/v1/report?range=2026-03-01..2026-03-31&client=example&project=work"),
+			"report" or "timesheet" => ("GET", "/v1/" + name + "?range=2026-03-01..2026-03-31&client=example&project=work"),
 
 			"defaults show" => ("GET", "/v1/defaults"),
 			"defaults set" => ("POST", "/v1/defaults"),
@@ -133,8 +133,38 @@ internal static class CommandCases
 			"report" => JsonSerializer.Serialize(Envelopes.Success(name,
 					new ReportDto(
 						[new(new(ClientId, "example"), new(ProjectId, "work"), "GBP", 3661, 4500, "01:15:00", new("GBP", "12.50", "12.50"))],
-						[new(new(ClientId, "example"), "GBP", 3661, 4500, "01:15:00", new("GBP", "12.50", "12.50"))])),
+						[new(new(ClientId, "example"), "GBP", 3661, 4500, "01:15:00", new("GBP", "12.50", "12.50"))],
+						[
+							new("open-task",
+								new(ClientId, "example"),
+								new(ProjectId, "work"),
+								"ref-open",
+								"paused",
+								60,
+								60,
+								"00:01:00",
+								new("GBP", "0.50", "0.50"))
+						])),
 				GigtimeJsonContext.Default.ReportResponse),
+
+			"timesheet" => JsonSerializer.Serialize(Envelopes.Success(name,
+					new TimesheetDto(
+						[
+							new("2026-03-02",
+								3661,
+								"01:01:01",
+								[
+									new("01JTASK",
+										new(ClientId, "example"),
+										new(ProjectId, "work"),
+										"ticket-7",
+										3661,
+										"01:01:01")
+								])
+						],
+						[new(new(ClientId, "example"), new(ProjectId, "work"), 3661, "01:01:01")],
+						[new(new(ClientId, "example"), 3661, "01:01:01")])),
+				GigtimeJsonContext.Default.TimesheetResponse),
 
 			"defaults show" or "defaults set" => JsonSerializer.Serialize(
 				Envelopes.Success(name, new DefaultsDto("Europe/London", "Monday", "up:15")),
@@ -159,6 +189,7 @@ internal static class CommandCases
 		return name switch
 		{
 			"report" => "12.50",
+			"timesheet" => "01:01:01",
 			"defaults show" or "defaults set" => "Europe/London",
 			"client add" or "client set" or "client list" => "Example [blue]",
 			"project add" or "project set" or "project list" => "25.00 GBP",

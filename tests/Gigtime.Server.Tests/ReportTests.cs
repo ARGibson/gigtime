@@ -26,7 +26,7 @@ public sealed class ReportTests
 			await app.PostAsync<ProjectDto>("/v1/clients/one/projects", new AddProjectRequest(key, Rate: rate));
 
 			for (var i = 0; i < 2; i++)
-				await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
+				await RecordAndSubmitAsync(app, new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
 		}
 
 		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!;
@@ -36,18 +36,18 @@ public sealed class ReportTests
 		{
 			total.RawSeconds.ShouldBe(120);
 			total.RoundedSeconds.ShouldBe(120);
-			total.EstimatedEarnings!.Rounded.ShouldBe(expected);
+			total.Amount!.Rounded.ShouldBe(expected);
 
 			decimal
-				.Parse(total.EstimatedEarnings.Unrounded, CultureInfo.InvariantCulture)
+				.Parse(total.Amount.Unrounded, CultureInfo.InvariantCulture)
 				.ShouldBe(decimal.Parse(expected, CultureInfo.InvariantCulture));
 		}
 
 		report.Clients.ShouldHaveSingleItem().RoundedSeconds.ShouldBe(240);
-		report.Clients[0].EstimatedEarnings!.Rounded.ShouldBe(clientExpected);
+		report.Clients[0].Amount!.Rounded.ShouldBe(clientExpected);
 
 		decimal
-			.Parse(report.Clients[0].EstimatedEarnings!.Unrounded, CultureInfo.InvariantCulture)
+			.Parse(report.Clients[0].Amount!.Unrounded, CultureInfo.InvariantCulture)
 			.ShouldBe(2 * decimal.Parse(expected, CultureInfo.InvariantCulture));
 	}
 
@@ -64,16 +64,16 @@ public sealed class ReportTests
 		await using var app = await ServiceHost.StartAsync();
 		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("one", "One", currency, "UTC"));
 		await app.PostAsync<ProjectDto>("/v1/clients/one/projects", new AddProjectRequest("work", Rate: rate));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("one", "work", "08:00", "08:07"));
+		await RecordAndSubmitAsync(app, new RecordTaskInput("one", "work", "08:00", "08:07"));
 		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!;
 		var project = report.Totals.ShouldHaveSingleItem();
 		project.RawSeconds.ShouldBe(420);
 		project.RoundedSeconds.ShouldBe(420);
-		project.EstimatedEarnings!.Unrounded.ShouldBe(unrounded);
-		project.EstimatedEarnings.Rounded.ShouldBe(rounded);
+		project.Amount!.Unrounded.ShouldBe(unrounded);
+		project.Amount.Rounded.ShouldBe(rounded);
 		var client = report.Clients.ShouldHaveSingleItem();
-		client.EstimatedEarnings!.Unrounded.ShouldBe(unrounded);
-		client.EstimatedEarnings.Rounded.ShouldBe(rounded);
+		client.Amount!.Unrounded.ShouldBe(unrounded);
+		client.Amount.Rounded.ShouldBe(rounded);
 	}
 
 	[Fact]
@@ -86,23 +86,21 @@ public sealed class ReportTests
 		{
 			await app.PostAsync<ProjectDto>("/v1/clients/one/projects", new AddProjectRequest(key, Rate: "0.3"));
 
-			var task = (await app.PostAsync<TaskDto>("/v1/tasks/add",
-				new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"))).Data!;
-
-			await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/submit");
+			await RecordAndSubmitAsync(app,
+				new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
 		}
 
 		await app.PatchAsync<ClientDto>("/v1/clients/one", new ChangeClientRequest(Currency: "USD"));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("one", "a", "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
+		await RecordAndSubmitAsync(app, new RecordTaskInput("one", "a", "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
 		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!;
 		report.Clients.Select(t => t.Currency).Order().ShouldBe(["GBP", "USD"]);
-		report.Clients.Single(t => t.Currency == "GBP").EstimatedEarnings!.Rounded.ShouldBe("0.01");
-		report.Totals.Where(t => t.Currency == "GBP").Select(t => t.EstimatedEarnings!.Rounded).ShouldBe(["0.01", "0.01"]);
+		report.Clients.Single(t => t.Currency == "GBP").Amount!.Rounded.ShouldBe("0.01");
+		report.Totals.Where(t => t.Currency == "GBP").Select(t => t.Amount!.Rounded).ShouldBe(["0.01", "0.01"]);
 		(await app.GetAsync<ReportDto>("/v1/report?client=one&project=b")).Data!.Totals.ShouldHaveSingleItem().Project.Key.ShouldBe("b");
 		(await app.GetAsync<ReportDto>("/v1/report?project=b")).Data!.Totals.Count.ShouldBe(1);
 		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("two", "Two", "EUR", "UTC"));
 		await app.PostAsync<ProjectDto>("/v1/clients/two/projects", new AddProjectRequest("b"));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("two", "b", "08:00", "08:01"));
+		await RecordAndSubmitAsync(app, new RecordTaskInput("two", "b", "08:00", "08:01"));
 		(await app.GetAsync<ReportDto>("/v1/report?client=one&project=b")).Data!.Totals.ShouldHaveSingleItem().Currency.ShouldBe("GBP");
 		(await app.GetAsync<ReportDto>("/v1/report?project=b")).Data!.Totals.Count.ShouldBe(2);
 
@@ -113,22 +111,32 @@ public sealed class ReportTests
 	}
 
 	[Fact]
-	public async Task Report_membership_uses_stop_local_date_across_week_month_and_DST_boundaries()
+	public async Task Settlement_membership_uses_submission_local_date_across_week_month_and_DST_boundaries()
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("ny", "New York", "USD", "America/New_York"));
 		await app.PostAsync<ProjectDto>("/v1/clients/ny/projects", new AddProjectRequest("work"));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "work", "2026-03-02T04:58:00Z", "2026-03-02T04:59:00Z"));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "work", "2026-03-02T04:59:00Z", "2026-03-02T05:01:00Z"));
+		app.Clock.Now = DateTimeOffset.Parse("2026-03-02T04:59:00Z", CultureInfo.InvariantCulture);
+		await RecordAndSubmitAsync(app, new("ny", "work", "2026-02-28T12:00:00Z", "2026-02-28T12:01:00Z"));
+		app.Clock.Now = app.Clock.Now.AddMinutes(2);
+		await RecordAndSubmitAsync(app, new("ny", "work", "2026-02-28T13:00:00Z", "2026-02-28T13:02:00Z"));
 		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(120);
 		await app.PostAsync<DefaultsDto>("/v1/defaults", new SetDefaultsRequest(WeekStarts: "Sunday"));
 		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(180);
-
 		app.Clock.Now = DateTimeOffset.Parse("2026-03-01T00:30:00Z", CultureInfo.InvariantCulture);
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "work", "2026-03-01T00:00:00Z", "2026-03-01T00:01:00Z"));
+		await RecordAndSubmitAsync(app, new("ny", "work", "2026-02-28T14:00:00Z", "2026-02-28T14:01:00Z"));
 		(await app.GetAsync<ReportDto>("/v1/report?month=true")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(60);
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "work", "2026-03-09T03:58:00Z", "2026-03-09T03:59:00Z"));
-		await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "work", "2026-03-09T03:59:00Z", "2026-03-09T04:00:00Z"));
+		app.Clock.Now = DateTimeOffset.Parse("2026-03-09T03:59:00Z", CultureInfo.InvariantCulture);
+		await RecordAndSubmitAsync(app, new("ny", "work", "2026-03-08T12:00:00Z", "2026-03-08T12:01:00Z"));
+		app.Clock.Now = app.Clock.Now.AddMinutes(1);
+		await RecordAndSubmitAsync(app, new("ny", "work", "2026-03-08T13:00:00Z", "2026-03-08T13:01:00Z"));
 		(await app.GetAsync<ReportDto>("/v1/report?range=2026-03-08..2026-03-08")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(60);
+	}
+
+	private static async Task RecordAndSubmitAsync(ServiceHost app, RecordTaskInput input)
+	{
+		var task = (await app.PostAsync<TaskDto>("/v1/tasks/add", input)).Data!;
+
+		await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/submit");
 	}
 }

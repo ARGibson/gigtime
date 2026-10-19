@@ -20,14 +20,13 @@ public sealed class SubmissionTests
 		var id = (await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project", Rate: "40"))).Data!.Id;
 		app.Clock.Now = app.Clock.Now.AddSeconds(90);
 		await app.PostAsync<TaskDto>("/v1/tasks/stop");
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single().EstimatedEarnings.ShouldNotBeNull();
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Single().Amount.ShouldNotBeNull();
 		await app.PatchAsync<ClientDto>("/v1/clients/example", new ChangeClientRequest(Currency: "EUR"));
 
-		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single();
-		report.Currency.ShouldBe("EUR");
+		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Single();
 		report.RawSeconds.ShouldBe(90);
 		report.RoundedSeconds.ShouldBe(120);
-		report.EstimatedEarnings.ShouldBeNull();
+		report.Amount.ShouldBeNull();
 		(await app.PostAsync<TaskDto>($"/v1/tasks/{id}/submit", status: 422)).Error!.Code.ShouldBe("validation");
 	}
 
@@ -43,7 +42,7 @@ public sealed class SubmissionTests
 		stopped.Submission.ShouldBeNull();
 		stopped.Rate.ShouldBeNull();
 		await app.PatchAsync<ProjectDto>("/v1/clients/example/projects/project", new ChangeProjectRequest(Rate: "20"));
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single().EstimatedEarnings!.Rounded.ShouldBe("10.00");
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Single().Amount!.Rounded.ShouldBe("10.00");
 		var submitted = (await app.PostAsync<TaskDto>($"/v1/tasks/{id}/submit")).Data!;
 		submitted.State.ShouldBe("submitted");
 		submitted.Submission!.SubmittedAt.ShouldBe(app.Clock.Now);
@@ -51,7 +50,7 @@ public sealed class SubmissionTests
 		submitted.Submission.Amount!.Rounded.ShouldBe("10.00");
 		await app.PatchAsync<ProjectDto>("/v1/clients/example/projects/project", new ChangeProjectRequest(Rate: "99"));
 		(await app.GetAsync<TaskDto>($"/v1/tasks/{id}")).Data!.Submission.ShouldBe(submitted.Submission);
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single().EstimatedEarnings!.Rounded.ShouldBe("10.00");
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single().Amount!.Rounded.ShouldBe("10.00");
 		(await app.PostAsync<TaskDto>($"/v1/tasks/{id}/unsubmit")).Data!.Submission.ShouldBeNull();
 		await app.PostAsync<TaskDto>($"/v1/tasks/{id}/amend", new AmendTaskInput(Rate: "40"));
 		app.Clock.Now = app.Clock.Now.AddMinutes(1);

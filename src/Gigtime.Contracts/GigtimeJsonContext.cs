@@ -16,6 +16,7 @@ namespace Gigtime.Contracts;
 [JsonSerializable(typeof(Envelope<ProjectDto>), TypeInfoPropertyName = "ProjectResponse")]
 [JsonSerializable(typeof(Envelope<ProjectsDto>), TypeInfoPropertyName = "ProjectsResponse")]
 [JsonSerializable(typeof(Envelope<ReportDto>), TypeInfoPropertyName = "ReportResponse")]
+[JsonSerializable(typeof(Envelope<TimesheetDto>), TypeInfoPropertyName = "TimesheetResponse")]
 [JsonSerializable(typeof(Envelope<AcknowledgementDto>), TypeInfoPropertyName = "AcknowledgementResponse")]
 [JsonSerializable(typeof(Envelope<HealthDto>), TypeInfoPropertyName = "HealthResponse")]
 [JsonSerializable(typeof(Envelope<SetupDto>), TypeInfoPropertyName = "SetupResponse")]

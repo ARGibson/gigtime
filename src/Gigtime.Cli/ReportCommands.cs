@@ -12,33 +12,22 @@ internal static class ReportCommands
 
 	internal static void Configure(RootCommand root, CliExchange exchange)
 	{
-		var report = Add(root, "report", "Totals by project and client/currency; defaults to this week.");
-		Flag(report, "week");
-		Flag(report, "month");
-		Text(report, "range");
-		Text(report, "client");
-		Text(report, "project");
-
-		report.Validators.Add(result =>
-		{
-			var range = result.GetValue<string>("--range");
-
-			if ((result.GetValue<bool>("--week") ? 1 : 0) + (result.GetValue<bool>("--month") ? 1 : 0) + (range is null ? 0 : 1) > 1
-					|| !ReportDates.TryParse(range, out _, out _))
-			{
-				result.AddError("Choose --week, --month or --range yyyy-MM-dd..yyyy-MM-dd (inclusive local dates).");
-			}
-		});
+		var report = Add(root, "report", "Show submitted totals and provisional unsubmitted tasks; defaults to this week.");
+		ConfigurePeriod(report);
 
 		report.SetAction((r, ct) => exchange.GetAsync(r,
 			"report",
-			"/v1/report" + Query(
-				("week", r.GetValue<bool>("--week") ? "true" : null),
-				("month", r.GetValue<bool>("--month") ? "true" : null),
-				("range", r.GetValue<string>("--range")),
-				("client", r.GetValue<string>("--client")),
-				("project", r.GetValue<string>("--project"))),
+			"/v1/report" + PeriodQuery(r),
 			GigtimeJsonContext.Default.ReportResponse,
+			ct));
+
+		var timesheet = Add(root, "timesheet", "Show raw time by local day and task; defaults to this week.");
+		ConfigurePeriod(timesheet);
+
+		timesheet.SetAction((r, ct) => exchange.GetAsync(r,
+			"timesheet",
+			"/v1/timesheet" + PeriodQuery(r),
+			GigtimeJsonContext.Default.TimesheetResponse,
 			ct));
 
 		var export = Add(root, "export", "Stream every event as JSON Lines; date-only bounds are inclusive UTC dates.");
@@ -62,5 +51,35 @@ internal static class ReportCommands
 				("from", r.GetValue<string>("--from")),
 				("to", r.GetValue<string>("--to"))),
 			ct));
+	}
+
+	private static void ConfigurePeriod(Command command)
+	{
+		Flag(command, "week");
+		Flag(command, "month");
+		Text(command, "range");
+		Text(command, "client");
+		Text(command, "project");
+
+		command.Validators.Add(result =>
+		{
+			var range = result.GetValue<string>("--range");
+
+			if ((result.GetValue<bool>("--week") ? 1 : 0) + (result.GetValue<bool>("--month") ? 1 : 0) + (range is null ? 0 : 1) > 1
+					|| !ReportDates.TryParse(range, out _, out _))
+			{
+				result.AddError("Choose --week, --month or --range yyyy-MM-dd..yyyy-MM-dd (inclusive local dates).");
+			}
+		});
+	}
+
+	private static string PeriodQuery(ParseResult result)
+	{
+		return Query(
+			("week", result.GetValue<bool>("--week") ? "true" : null),
+			("month", result.GetValue<bool>("--month") ? "true" : null),
+			("range", result.GetValue<string>("--range")),
+			("client", result.GetValue<string>("--client")),
+			("project", result.GetValue<string>("--project")));
 	}
 }

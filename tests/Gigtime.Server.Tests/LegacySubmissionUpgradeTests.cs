@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Fisher;
+using Gigtime.Contracts.Reporting;
 using Gigtime.Contracts.Tasks;
 using Gigtime.Domain.Catalogue;
 using Gigtime.Domain.Tasks;
@@ -19,6 +20,28 @@ public sealed class LegacySubmissionUpgradeTests
 {
 	private static readonly DateTimeOffset at = DateTimeOffset.Parse("2026-03-02T09:00:00Z",
 		System.Globalization.CultureInfo.InvariantCulture);
+
+	[Fact]
+	public async Task Past_month_settlement_matches_the_main_report_for_the_same_legacy_fixture()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-report-" + Guid.NewGuid().ToString("N"));
+		await SeedLegacyAsync(root);
+		await using var app = await ServiceHost.StartAsync(root);
+		var report = (await app.GetAsync<ReportDto>("/v1/report?range=2026-03-01..2026-03-31")).Data!;
+		// #35: captured from main 9a5ab60 after its legacy upgrade: two 40-second tasks at GBP120, current USD999.
+		var project = report.Totals.ShouldHaveSingleItem();
+		project.Client.Key.ShouldBe("legacy");
+		project.Project.Key.ShouldBe("work");
+		project.Currency.ShouldBe("GBP");
+		project.RawSeconds.ShouldBe(80);
+		project.RoundedSeconds.ShouldBe(120);
+		project.Amount.ShouldBe(new("GBP", "4", "4.00"));
+		var client = report.Clients.ShouldHaveSingleItem();
+		client.RawSeconds.ShouldBe(80);
+		client.RoundedSeconds.ShouldBe(120);
+		client.Amount.ShouldBe(project.Amount);
+		report.Unsubmitted.ShouldHaveSingleItem().TaskId.ShouldBe("dddddd");
+	}
 
 	[Fact]
 	public async Task Old_stored_snapshot_document_loads_without_a_projection_rebuild()

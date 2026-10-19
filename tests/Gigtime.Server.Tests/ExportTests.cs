@@ -20,7 +20,7 @@ public sealed class ExportTests
 			id = (await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("example", "project", "08:00", "08:01"))).Data!.Id;
 
 		await app.PostAsync<TaskDto>($"/v1/tasks/{id}/void", new VoidTaskRequest("mistake"));
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(195 * 60);
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Sum(t => t.RawSeconds).ShouldBe(195 * 60);
 		(await app.GetAsync<TasksDto>("/v1/tasks?all=true&last=200")).Data!.Tasks.Single(t => t.Id == id).State.ShouldBe("voided");
 		(await app.GetAsync<TasksDto>("/v1/tasks?last=200")).Data!.Tasks.ShouldNotContain(t => t.Id == id);
 		var response = await app.Host.Scenario(s => s.Get.Url("/v1/export"));

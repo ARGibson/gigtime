@@ -8,7 +8,7 @@ commands=(
   'start:start a task' 'pause:pause' 'resume:resume' 'stop:stop' 'status:show open task'
   'log:recent tasks' 'show:show a task' 'add:backfill' 'amend:correct a task'
   'submit:fix a stopped task figure' 'unsubmit:allow corrections'
-  'void:void a task' 'report:report totals' 'export:export events'
+  'void:void a task' 'report:submitted settlement' 'timesheet:raw time by day' 'export:export events'
 )
 if (( CURRENT == 2 )); then
   if [[ $PREFIX == --* ]]; then compadd -- --help --json --version; return; fi
@@ -63,7 +63,7 @@ case "$words[2]" in
     '--client[client key]:client:->live'
     '--project[project key]:project:->live'
     '--all[include voided]') ;;
-  report) flags+=('--week[this week]'
+  report|timesheet) flags+=('--week[this week]'
     '--month[this month]'
     '--range[inclusive dates]:range:'
     '--client[client key]:client:->live'
