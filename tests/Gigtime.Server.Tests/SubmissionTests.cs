@@ -27,6 +27,7 @@ public sealed class SubmissionTests
 		report.RawSeconds.ShouldBe(90);
 		report.RoundedSeconds.ShouldBe(120);
 		report.Amount.ShouldBeNull();
+		report.Rate.ShouldBe(new("40", "GBP"));
 		(await app.PostAsync<TaskDto>($"/v1/tasks/{id}/submit", status: 422)).Error!.Code.ShouldBe("validation");
 	}
 

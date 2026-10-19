@@ -20,7 +20,7 @@ public static class SettlementMath
 
 			if (task.State is TaskState.Running or TaskState.Paused or TaskState.Stopped)
 			{
-				unsubmitted.Add(new(task.Id, clientId, task.ProjectId, task.Ref, task.State, figures));
+				unsubmitted.Add(new(task.Id, clientId, task.ProjectId, task.Ref, task.State, figures, task.Rate));
 
 				continue;
 			}

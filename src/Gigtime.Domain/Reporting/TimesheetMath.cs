@@ -30,7 +30,9 @@ public static class TimesheetMath
 				{
 					var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
 					var next = Midnight(date.AddDays(1), zone);
-					var boundary = next < end ? next : end;
+					// #35: a backwards date shift can put the first midnight before this interval.
+					if (next <= start) next = Midnight(date.AddDays(1), zone, start);
+					var boundary = next > start && next < end ? next : end;
 					var seconds = (boundary - start).Ticks / TimeSpan.TicksPerSecond;
 					if (seconds > 0) slices.Add((date, task, seconds));
 					start = boundary;
@@ -66,13 +68,13 @@ public static class TimesheetMath
 		return new(days, projects, clients);
 	}
 
-	private static DateTimeOffset Midnight(DateOnly date, TimeZoneInfo zone)
+	private static DateTimeOffset Midnight(DateOnly date, TimeZoneInfo zone, DateTimeOffset? after = null)
 	{
 		// #35: search real instants rather than trusting IsInvalidTime. Entire skipped dates
 		// (for example Apia in 2011) can round-trip to a different date without being marked invalid.
 		var nominal = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).Ticks;
-		var low = Math.Max(DateTimeOffset.MinValue.UtcTicks, nominal - 2 * TimeSpan.TicksPerDay);
-		var high = Math.Min(DateTimeOffset.MaxValue.UtcTicks, nominal + 2 * TimeSpan.TicksPerDay);
+		var low = after?.UtcTicks ?? Math.Max(DateTimeOffset.MinValue.UtcTicks, nominal - 2 * TimeSpan.TicksPerDay);
+		var high = Math.Min(DateTimeOffset.MaxValue.UtcTicks, (after?.UtcTicks ?? nominal) + 2 * TimeSpan.TicksPerDay);
 		var first = new DateTimeOffset(low, TimeSpan.Zero);
 
 		if (DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(first, zone).DateTime) >= date) return first;

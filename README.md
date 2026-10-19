@@ -193,7 +193,8 @@ gig project add acme work --name Work --rate 40
 gig start acme work --ref opaque-42
 gig pause
 gig resume
-gig stop
+gig timesheet --week
+gig stop --submit
 gig report --week
 gig log
 ```
@@ -209,8 +210,9 @@ voided tasks.
 Times accept ISO 8601 instants or local date-times, and `HH:mm` for today in the client's
 zone. An explicit offset is unambiguous; local times in a daylight-saving gap or overlap
 are refused. Intervals cannot overlap or run backwards. Timesheets split intervals at
-local midnight, including daylight-saving changes, and show raw time on each day it happened. Settlement reports count submitted tasks in
-the period containing their submission instant, in the client's timezone.
+local midnight, including daylight-saving changes, and show raw time on each day it
+happened. Settlement reports count submitted tasks in the period containing their
+submission instant, in the client's timezone.
 
 ## Commands
 
@@ -276,9 +278,12 @@ and client. It contains raw time only, with no rounding or money.
 `report` settles submitted tasks using their fixed rounded totals and amounts. Its
 Unsubmitted section lists every running, paused or stopped task with provisional figures,
 including tasks outside the selected period. Client and project filters apply to both
-sections. Unsubmitting removes a task from settled totals; resubmitting places it in the
-new submission's period. Migrated tasks keep their old stop instant as their submission
-instant, preserving historical settlement totals.
+sections. Its nullable `rate` is the task's own rate, in the same money shape as a
+task's `rate`. A stale-currency own rate leaves `amount` null and renders as `unpriced`;
+a task without a rate renders as `not rated`. Unsubmitting removes a task from settled
+totals; resubmitting places it in the new submission's period. Migrated tasks keep
+their old stop instant as their submission instant, preserving historical settlement
+totals.
 
 Human task times use the effective client timezone, printed once as `Times in
 America/New_York` (or the selected IANA zone). Instants on today in that zone use
@@ -324,7 +329,7 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Status | `task` (null when no task is open), `instance` (null for default) |
 | Log | `tasks` array |
 | Report | `totals`, `clients`, `unsubmitted` arrays |
-| Unsubmitted task | `task_id`, `client`, `project`, `ref`, `state`, `raw_seconds`, `rounded_seconds`, `display`, `amount` (nullable, provisional) |
+| Unsubmitted task | `task_id`, `client`, `project`, `ref`, `state`, `raw_seconds`, `rounded_seconds`, `display`, `amount` (nullable, provisional), `rate` (own rate, nullable) |
 | Timesheet | `days`, `projects`, `clients` arrays |
 | Timesheet day | `date`, `raw_seconds`, `display`, `tasks` array |
 | Timesheet task | `task_id`, `client`, `project`, `ref`, `raw_seconds`, `display` |

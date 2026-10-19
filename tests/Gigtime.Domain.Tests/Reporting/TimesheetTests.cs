@@ -148,6 +148,60 @@ public sealed class TimesheetTests
 	}
 
 	[Fact]
+	public void Sitkas_repeated_date_never_moves_the_interval_cursor_backwards()
+	{
+		var s = new ReportScenario("America/Sitka");
+		s.Record("111111", "1867-10-19T00:40:00Z", "1867-10-19T01:40:00Z");
+		var query = new ReportQuery(At("1867-10-20T00:00:00Z"), PeriodKind.Range, new(1867, 10, 18), new(1867, 10, 20));
+		var result = TimesheetMath.Calculate(s.Tasks, s.Catalogue.State, query, query.At);
+		result.Days.Sum(day => day.RawSeconds).ShouldBe(3600);
+		result.Projects.ShouldHaveSingleItem().RawSeconds.ShouldBe(3600);
+		result.Clients.ShouldHaveSingleItem().RawSeconds.ShouldBe(3600);
+	}
+
+	[Theory]
+	[InlineData("UTC", "2026-03-01T23:30:00Z", "2026-03-03T00:30:00Z", "2026-03-02", "2026-03-03")]
+	[InlineData("America/New_York", "2026-03-08T04:30:00Z", "2026-03-09T04:30:00Z", "2026-03-08", "2026-03-09")]
+	[InlineData("America/New_York", "2026-11-01T03:30:00Z", "2026-11-02T05:30:00Z", "2026-11-01", "2026-11-02")]
+	[InlineData("America/Havana", "2026-11-01T03:30:00Z", "2026-11-01T05:30:00Z", "2026-10-31", "2026-11-02")]
+	[InlineData("America/Sao_Paulo", "2018-11-04T02:30:00Z", "2018-11-04T03:30:00Z", "2018-11-03", "2018-11-05")]
+	[InlineData("Pacific/Apia", "2011-12-30T09:30:00Z", "2011-12-30T10:30:00Z", "2011-12-29", "2012-01-01")]
+	[InlineData("Pacific/Apia", "2011-12-30T09:30:00Z", "2011-12-30T10:30:00Z", "2011-12-30", "2011-12-31")]
+	[InlineData("America/Sitka", "1867-10-19T00:40:00Z", "1867-10-19T01:40:00Z", "1867-10-18", "1867-10-20")]
+	[InlineData("America/Sitka", "1867-10-19T00:20:00Z", "1867-10-19T01:40:00Z", "1867-10-18", "1867-10-20")]
+	public void Day_slices_conserve_every_second_of_the_interval_that_falls_in_the_period(
+		string zone,
+		string start,
+		string end,
+		string from,
+		string until)
+	{
+		var s = new ReportScenario(zone);
+		s.Record("111111", start, end);
+
+		var query = new ReportQuery(At(end),
+			PeriodKind.Range,
+			DateOnly.Parse(from, System.Globalization.CultureInfo.InvariantCulture),
+			DateOnly.Parse(until, System.Globalization.CultureInfo.InvariantCulture));
+
+		var period = ReportPeriod.For(query, s.Catalogue.State.Resolve(s.Catalogue.ProjectId));
+		long expected = 0;
+
+		// Check local-date membership directly, independently of the splitter's midnight search.
+		for (var instant = At(start); instant < At(end); instant = instant.AddSeconds(1))
+		{
+			if (period.Contains(instant, zone)) expected++;
+		}
+
+		var result = TimesheetMath.Calculate(s.Tasks, s.Catalogue.State, query, query.At);
+		result.Days.Sum(day => day.RawSeconds).ShouldBe(expected);
+		result.Days.Sum(day => day.Tasks.Sum(task => task.RawSeconds)).ShouldBe(expected);
+		result.Projects.Sum(project => project.RawSeconds).ShouldBe(expected);
+		result.Clients.Sum(client => client.RawSeconds).ShouldBe(expected);
+		result.Days.ShouldAllBe(day => day.RawSeconds > 0);
+	}
+
+	[Fact]
 	public void Current_catalogue_keys_order_tasks_and_totals_and_both_filters_apply()
 	{
 		var s = new ReportScenario();

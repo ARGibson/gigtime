@@ -30,7 +30,8 @@ public sealed record UnsubmittedTaskDto(
 	long RawSeconds,
 	long RoundedSeconds,
 	string Display,
-	EarningsDto? Amount);
+	EarningsDto? Amount,
+	MoneyDto? Rate = null);
 
 public sealed record ReportDto(
 	IReadOnlyList<ReportTotalDto> Totals,

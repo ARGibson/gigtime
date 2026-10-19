@@ -38,7 +38,8 @@ public static class ReportResponses
 				t.Figures.RawSeconds,
 				t.Figures.RoundedSeconds,
 				DurationText.Format(t.Figures.RoundedSeconds),
-				Money(t.Figures.Earnings, t.Figures.Currency)))
+				Money(t.Figures.Earnings, t.Figures.Currency),
+				t.Rate is { } own ? new(own.Amount.ToString(CultureInfo.InvariantCulture), own.Currency) : null))
 			.ToArray();
 
 		return new(projects, clients, unsubmitted);

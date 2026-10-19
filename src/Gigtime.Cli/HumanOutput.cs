@@ -113,7 +113,11 @@ internal sealed class HumanOutput
 			report.Unsubmitted.Select(t => new[]
 			{
 				t.TaskId, t.Client.Key, t.Project.Key, t.Ref ?? "", t.State, DurationText.Format(t.RawSeconds),
-				DurationText.Format(t.RoundedSeconds), t.Amount is { } amount ? amount.Rounded + " " + amount.Currency : "not rated",
+				DurationText.Format(t.RoundedSeconds), t.Amount is { } amount
+					? amount.Rounded + " " + amount.Currency
+					: t.Rate is not null
+						? "unpriced"
+						: "not rated",
 			}));
 	}
 

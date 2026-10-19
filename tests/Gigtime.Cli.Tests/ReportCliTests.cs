@@ -95,8 +95,10 @@ public sealed class ReportCliTests
 		text.ShouldContain("0.50 GBP");
 	}
 
-	[Fact]
-	public async Task Unrated_provisional_tasks_render_not_rated()
+	[Theory]
+	[InlineData(false, "not rated")]
+	[InlineData(true, "unpriced")]
+	public async Task Null_provisional_amount_distinguishes_own_rate_from_unrated(bool hasOwnRate, string expected)
 	{
 		var body = JsonSerializer.Serialize(Envelopes.Success("report",
 				new ReportDto([],
@@ -110,7 +112,8 @@ public sealed class ReportCliTests
 							60,
 							60,
 							"00:01:00",
-							null)
+							null,
+							Rate: hasOwnRate ? new("45", "GBP") : null)
 					])),
 			GigtimeJsonContext.Default.ReportResponse);
 
@@ -121,6 +124,7 @@ public sealed class ReportCliTests
 
 		(await app.RunAsync(["report"], TestContext.Current.CancellationToken)).ShouldBe(0);
 		output.ToString().ShouldContain("running");
-		output.ToString().ShouldContain("not rated");
+		output.ToString().ShouldContain(expected);
+		output.ToString().ShouldNotContain(hasOwnRate ? "not rated" : "unpriced");
 	}
 }

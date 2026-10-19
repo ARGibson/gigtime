@@ -21,26 +21,60 @@ public sealed class LegacySubmissionUpgradeTests
 	private static readonly DateTimeOffset at = DateTimeOffset.Parse("2026-03-02T09:00:00Z",
 		System.Globalization.CultureInfo.InvariantCulture);
 
-	[Fact]
-	public async Task Past_month_settlement_matches_the_main_report_for_the_same_legacy_fixture()
+	[Theory]
+	[InlineData("2026-02-01..2026-02-28", null, null)]
+	[InlineData("2026-03-01..2026-03-31", null, null)]
+	[InlineData("2026-03-01..2026-03-31", "ny", null)]
+	[InlineData("2026-03-01..2026-03-31", null, "a")]
+	[InlineData("2026-03-01..2026-03-31", "ny", "a")]
+	public async Task Legacy_settlement_matches_captured_main_figures(string range, string? clientFilter, string? projectFilter)
 	{
 		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-report-" + Guid.NewGuid().ToString("N"));
-		await SeedLegacyAsync(root);
+		await LegacySettlementFixture.SeedAsync(root, TestContext.Current.CancellationToken);
 		await using var app = await ServiceHost.StartAsync(root);
-		var report = (await app.GetAsync<ReportDto>("/v1/report?range=2026-03-01..2026-03-31")).Data!;
-		// #35: captured from main 9a5ab60 after its legacy upgrade: two 40-second tasks at GBP120, current USD999.
-		var project = report.Totals.ShouldHaveSingleItem();
-		project.Client.Key.ShouldBe("legacy");
-		project.Project.Key.ShouldBe("work");
-		project.Currency.ShouldBe("GBP");
-		project.RawSeconds.ShouldBe(80);
-		project.RoundedSeconds.ShouldBe(120);
-		project.Amount.ShouldBe(new("GBP", "4", "4.00"));
-		var client = report.Clients.ShouldHaveSingleItem();
-		client.RawSeconds.ShouldBe(80);
-		client.RoundedSeconds.ShouldBe(120);
-		client.Amount.ShouldBe(project.Amount);
-		report.Unsubmitted.ShouldHaveSingleItem().TaskId.ShouldBe("dddddd");
+		var url = "/v1/report?range=" + range;
+		if (clientFilter is not null) url += "&client=" + clientFilter;
+		if (projectFilter is not null) url += "&project=" + projectFilter;
+		var report = (await app.GetAsync<ReportDto>(url)).Data!;
+		// #35: literal figures captured by running this exact fixture through main 9a5ab60's report.
+		const string nyAmount = "281.66666666666666666666666666";
+		var february = range.StartsWith("2026-02", StringComparison.Ordinal);
+
+		(string Client, string Project, string Currency, long Raw, long Rounded, string? Unrounded, string? Amount)[] expected = february
+			? [("ny", "a", "USD", 3599, 3600, "100", "100.00")]
+			:
+			[
+				("ny", "a", "USD", 10096, 10140, nyAmount, "281.67"),
+				("ny", "b", "USD", 29, 0, null, null),
+				("eu", "c", "EUR", 9000, 9000, "200", "200.00"),
+				("lon", "a", "GBP", 5400, 5400, "75", "75.00"),
+			];
+
+		var included = expected.Where(x => (clientFilter is null || x.Client == clientFilter)
+			&& (projectFilter is null || x.Project == projectFilter));
+
+		report
+			.Totals.Select(x => (x.Client.Key, x.Project.Key, x.Currency, x.RawSeconds, x.RoundedSeconds,
+				x.Amount?.Unrounded, x.Amount?.Rounded))
+			.Order()
+			.ShouldBe(included.Order());
+
+		(string Client, string Currency, long Raw, long Rounded, string? Unrounded, string? Amount)[] expectedClients = february
+			? [("ny", "USD", 3599, 3600, "100", "100.00")]
+			: projectFilter is not null
+				? [("ny", "USD", 10096, 10140, nyAmount, "281.67"), ("lon", "GBP", 5400, 5400, "75", "75.00")]
+				:
+				[
+					("ny", "USD", 10125, 10140, null, null), ("eu", "EUR", 9000, 9000, "200", "200.00"),
+					("lon", "GBP", 5400, 5400, "75", "75.00"),
+				];
+
+		report
+			.Clients.Select(x => (x.Client.Key, x.Currency, x.RawSeconds, x.RoundedSeconds, x.Amount?.Unrounded, x.Amount?.Rounded))
+			.Order()
+			.ShouldBe(expectedClients.Where(x => clientFilter is null || x.Client == clientFilter).Order());
+
+		report.Unsubmitted.ShouldHaveSingleItem().TaskId.ShouldBe("a10008");
 	}
 
 	[Fact]

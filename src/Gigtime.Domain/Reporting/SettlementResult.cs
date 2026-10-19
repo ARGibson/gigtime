@@ -11,4 +11,11 @@ public sealed record ReportTotal(Guid ClientId, Guid ProjectId, string Currency,
 
 public sealed record ClientReportTotal(Guid ClientId, string Currency, long RawSeconds, long RoundedSeconds, decimal? Earnings);
 
-public sealed record UnsubmittedTask(string TaskId, Guid ClientId, Guid ProjectId, string? Ref, TaskState State, TaskFigures Figures);
+public sealed record UnsubmittedTask(
+	string TaskId,
+	Guid ClientId,
+	Guid ProjectId,
+	string? Ref,
+	TaskState State,
+	TaskFigures Figures,
+	TaskRate? Rate = null);
