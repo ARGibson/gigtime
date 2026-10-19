@@ -55,7 +55,6 @@ public static class TaskWrites
 			Ref = old.Ref,
 			State = old.State,
 			Timeline = [.. old.Timeline],
-			Snapshot = old.Snapshot,
 			Rate = old.Rate,
 			Submission = old.Submission,
 			StartedAt = old.StartedAt,

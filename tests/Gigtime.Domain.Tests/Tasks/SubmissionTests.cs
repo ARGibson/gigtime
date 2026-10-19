@@ -8,12 +8,32 @@ namespace Gigtime.Domain.Tests.Tasks;
 public sealed class SubmissionTests
 {
 	[Fact]
+	public void Stale_own_currency_leaves_provisional_time_unpriced_and_submission_refused()
+	{
+		var s = new TaskScenario();
+		s.Send(new StartTask("7f3a9c", s.Catalogue.ProjectId, null, TaskScenario.At, Rate: 40m));
+		s.Send(new StopTask(TaskScenario.At.AddSeconds(90)));
+		s.Figures.Rate.ShouldBe(40m);
+		s.Figures.Earnings.ShouldBe(40m / 30m);
+		s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Currency: Change.Set("EUR")));
+
+		s.Task.Rate.ShouldBe(new(40m, "USD"));
+		s.Figures.RawSeconds.ShouldBe(90);
+		s.Figures.RoundedSeconds.ShouldBe(120);
+		s.Figures.Currency.ShouldBe("EUR");
+		s.Figures.Rate.ShouldBeNull();
+		s.Figures.Earnings.ShouldBeNull();
+		var refusal = s.Decide(new SubmitTask(TaskScenario.At.AddMinutes(2)));
+		refusal.Error!.Code.ShouldBe("validation");
+		refusal.Events.ShouldBeEmpty();
+	}
+
+	[Fact]
 	public void Submission_freezes_current_figures_and_unsubmit_resolves_them_afresh()
 	{
 		var s = new TaskScenario();
 		s.Start();
 		s.Send(new StopTask(TaskScenario.At.AddSeconds(90)));
-		s.Task.Snapshot.ShouldBeNull();
 		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(180m)));
 		s.Figures.Earnings.ShouldBe(6m);
 		var submittedAt = TaskScenario.At.AddMinutes(3);
@@ -234,7 +254,6 @@ public sealed class SubmissionTests
 		replay.State.ShouldBe(s.Task.State);
 		replay.Rate.ShouldBe(s.Task.Rate);
 		replay.Submission.ShouldBe(s.Task.Submission);
-		replay.Snapshot.ShouldBeNull();
 		replay.Timeline.ShouldBe(s.Task.Timeline);
 		replay.StoppedAt.ShouldBe(s.Task.StoppedAt);
 		TaskFigures.Resolve(replay, s.Catalogue.State, TaskScenario.At.AddHours(1)).ShouldBe(s.Figures);

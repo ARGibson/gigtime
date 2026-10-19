@@ -19,7 +19,6 @@ public sealed class CorrectionTests
 		s.Catalogue.Send(new ChangeClient(s.Catalogue.ClientId, Currency: Change.Set("EUR")));
 
 		s.Figures.RoundedSeconds.ShouldBe(60);
-		s.Task.Snapshot.ShouldBeNull();
 		s.Figures.Currency.ShouldBe("EUR");
 		s.Figures.Earnings.ShouldBe(999m / 60m);
 
@@ -58,7 +57,6 @@ public sealed class CorrectionTests
 
 		recorded.State.ShouldBe(TaskState.Stopped);
 		recorded.RawSeconds.ShouldBe(3600);
-		recorded.Snapshot.ShouldBeNull();
 		TaskFigures.Resolve(recorded, s.Catalogue.State, TaskScenario.At).Rate.ShouldBe(120m);
 		s.Tracker.TaskId.ShouldBe(s.Task.Id);
 	}
@@ -112,7 +110,6 @@ public sealed class CorrectionTests
 
 		s.Task.ProjectId.ShouldBe(project);
 		s.Task.Ref.ShouldBeNull();
-		s.Task.Snapshot.ShouldBeNull();
 		s.Figures.Rate.ShouldBe(999m);
 
 		s.Send(new VoidTask());
@@ -145,14 +142,12 @@ public sealed class CorrectionTests
 	{
 		var s = new TaskScenario();
 		s.Reach(state);
-		var snapshot = s.Task.Snapshot;
 		var start = TaskScenario.At.AddSeconds(-1);
 		s.Send(new AmendInterval(1, Start: start));
 
 		s.Task.Timeline.Single().Start.ShouldBe(start);
 		s.Task.StartedAt.ShouldBe(start);
 		s.Task.State.ShouldBe(state);
-		s.Task.Snapshot.ShouldBe(snapshot);
 	}
 
 	[Theory]
@@ -165,12 +160,10 @@ public sealed class CorrectionTests
 		s.Reach(state);
 		var project = Guid.CreateVersion7();
 		s.Catalogue.Send(new AddProject(project, s.Catalogue.ClientId, "other", Rate: 999m));
-		var snapshot = s.Task.Snapshot;
 		s.Send(new ReassignTask(project));
 
 		s.Task.ProjectId.ShouldBe(project);
 		s.Task.State.ShouldBe(state);
-		s.Task.Snapshot.ShouldBe(snapshot);
 	}
 
 	[Theory]

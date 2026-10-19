@@ -6,9 +6,11 @@ public static class LegacySubmissionMigration
 	{
 		ArgumentNullException.ThrowIfNull(task);
 
+#pragma warning disable CS0618 // Only migration consumes the legacy snapshot.
 		return task.State == TaskState.Stopped && task.Submission is null
-			&& task.Snapshot is { } snapshot && task.StoppedAt is { } stopped
+			&& task.LegacySnapshot is { } snapshot && task.StoppedAt is { } stopped
 				? new(stopped, TaskMath.Round(task.RawSeconds, snapshot.Rounding), snapshot.Rounding, snapshot.Rate, snapshot.Currency)
 				: null;
+#pragma warning restore CS0618
 	}
 }

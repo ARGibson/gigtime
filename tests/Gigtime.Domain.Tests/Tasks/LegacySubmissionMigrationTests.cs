@@ -29,7 +29,6 @@ public sealed class LegacySubmissionMigrationTests
 			task.Evolve(new TaskStopped(stop, "nearest-minute", rate, "USD"));
 		}
 
-		task.Snapshot.ShouldBe(new("nearest-minute", rate, "USD"));
 		var migrated = LegacySubmissionMigration.Decide(task);
 		migrated.ShouldBe(new(stop, 120, "nearest-minute", rate, "USD"));
 		// Planning a migration is pure; only replaying the returned event changes the task.
@@ -88,7 +87,6 @@ public sealed class LegacySubmissionMigrationTests
 		stopped.Rounding.ShouldBeNull();
 		stopped.Rate.ShouldBeNull();
 		stopped.Currency.ShouldBeNull();
-		s.Task.Snapshot.ShouldBeNull();
 		LegacySubmissionMigration.Decide(s.Task).ShouldBeNull();
 	}
 

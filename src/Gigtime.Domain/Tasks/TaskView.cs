@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Gigtime.Domain.Catalogue;
 
 namespace Gigtime.Domain.Tasks;
@@ -14,7 +15,10 @@ public sealed class TaskView
 	public IReadOnlyList<Interval> Intervals => Timeline.Where(i => i.End is null || i.End > i.Start).ToArray();
 
 	// #34: retained only to recognise legacy events for the one-off submission migration.
-	public PolicySnapshot? Snapshot { get; set; }
+	[Obsolete("Exists only for the legacy submission migration.")]
+	[JsonPropertyName("snapshot")]
+	public PolicySnapshot? LegacySnapshot { get; set; }
+
 	public TaskRate? Rate { get; set; }
 	public TaskSubmission? Submission { get; set; }
 	public DateTimeOffset? StartedAt { get; set; }
@@ -58,7 +62,9 @@ public sealed class TaskView
 		if (State == TaskState.Running) Close(e.At);
 		State = TaskState.Stopped;
 		StoppedAt = e.At;
-		Snapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning disable CS0618 // Legacy event projection retains the migration input.
+		LegacySnapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning restore CS0618
 	}
 
 	public void Apply(TaskRecorded e)
@@ -69,7 +75,9 @@ public sealed class TaskView
 		State = TaskState.Stopped;
 		StartedAt = e.Start;
 		StoppedAt = e.End;
-		Snapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning disable CS0618 // Legacy event projection retains the migration input.
+		LegacySnapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning restore CS0618
 
 		Timeline.Add(new(1, e.Start, e.End));
 	}

@@ -202,8 +202,9 @@ There can be one open task. Pause closes its current interval; resume opens anot
 Stop closes the task and leaves its figures provisional. `gig submit <task>` fixes the
 rounded total, rate and currency at submission; `gig stop --submit` does both together.
 Submitted tasks refuse corrections and voiding until `gig unsubmit <task>` returns them
-to stopped. `add` backfills a stopped task without changing the open task. `void` preserves history while excluding a task from reports
-and the default log. `log --all` includes voided tasks.
+to stopped. `add` backfills a stopped task without changing the open task. `void` preserves
+history while excluding a task from reports and the default log. `log --all` includes
+voided tasks.
 
 Times accept ISO 8601 instants or local date-times, and `HH:mm` for today in the client's
 zone. An explicit offset is unambiguous; local times in a daylight-saving gap or overlap
@@ -251,7 +252,7 @@ and `--rounding`. A value flag and its `--clear-*` counterpart cannot be combine
 `--clear-ref`, and `--rate 45` or `--clear-rate`. Time corrections require `--interval` and at least one time flag.
 `report` selects one of `--week` (default), `--month`, or inclusive local dates with
 `--range`. Export date-only bounds include the entire UTC date. Task ids are six
-lowercase hexadecimal characters; `show`, `amend`, `void`, `submit` and `unsubmit` accept an unambiguous prefix.
+lowercase hexadecimal characters.
 Completion offers stopped tasks for `submit` and submitted tasks for `unsubmit`.
 
 A task's own `--rate` overrides the project rate and records the client currency.

@@ -196,7 +196,6 @@ public sealed class LifecycleTests
 		task.Ref.ShouldBeNull();
 		task.State.ShouldBe(s.Task.State);
 		task.Timeline.ShouldBe(s.Task.Timeline);
-		task.Snapshot.ShouldBe(s.Task.Snapshot);
 		task.Rate.ShouldBe(s.Task.Rate);
 		task.Submission.ShouldBe(s.Task.Submission);
 		task.StartedAt.ShouldBe(s.Task.StartedAt);

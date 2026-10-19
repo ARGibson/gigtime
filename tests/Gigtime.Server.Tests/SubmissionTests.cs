@@ -13,6 +13,25 @@ namespace Gigtime.Server.Tests;
 public sealed class SubmissionTests
 {
 	[Fact]
+	public async Task Report_keeps_time_but_omits_earnings_when_own_rate_currency_is_stale()
+	{
+		await using var app = await ServiceHost.StartAsync();
+		await app.CreateProjectAsync();
+		var id = (await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project", Rate: "40"))).Data!.Id;
+		app.Clock.Now = app.Clock.Now.AddSeconds(90);
+		await app.PostAsync<TaskDto>("/v1/tasks/stop");
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single().EstimatedEarnings.ShouldNotBeNull();
+		await app.PatchAsync<ClientDto>("/v1/clients/example", new ChangeClientRequest(Currency: "EUR"));
+
+		var report = (await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.Single();
+		report.Currency.ShouldBe("EUR");
+		report.RawSeconds.ShouldBe(90);
+		report.RoundedSeconds.ShouldBe(120);
+		report.EstimatedEarnings.ShouldBeNull();
+		(await app.PostAsync<TaskDto>($"/v1/tasks/{id}/submit", status: 422)).Error!.Code.ShouldBe("validation");
+	}
+
+	[Fact]
 	public async Task Provisional_figures_follow_catalogue_until_submission_then_stay_fixed_and_can_be_revised_after_unsubmit()
 	{
 		await using var app = await ServiceHost.StartAsync();

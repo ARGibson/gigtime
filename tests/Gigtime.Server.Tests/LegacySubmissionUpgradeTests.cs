@@ -8,6 +8,7 @@ using JasperFx;
 using JasperFx.Events;
 using JasperFx.Events.Documents;
 using JasperFx.Events.Projections;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
 using Xunit;
@@ -18,6 +19,46 @@ public sealed class LegacySubmissionUpgradeTests
 {
 	private static readonly DateTimeOffset at = DateTimeOffset.Parse("2026-03-02T09:00:00Z",
 		System.Globalization.CultureInfo.InvariantCulture);
+
+	[Fact]
+	public async Task Old_stored_snapshot_document_loads_without_a_projection_rebuild()
+	{
+		var root = Path.Combine(Path.GetTempPath(), "gig-legacy-document-" + Guid.NewGuid().ToString("N"));
+		await SeedLegacyAsync(root);
+
+		try
+		{
+			// #34: use the pre-submission writer's JSON shape, independent of today's serializer.
+			const string document = """
+															{"id":"aaaaaa","projectId":"11111111-1111-1111-1111-111111111111","state":3,
+															"timeline":[{"number":1,"start":"2026-03-02T09:00:00+00:00","end":"2026-03-02T09:00:40+00:00","seconds":40}],
+															"snapshot":{"rounding":"nearest-minute","rate":120,"currency":"GBP"},
+															"startedAt":"2026-03-02T09:00:00+00:00","stoppedAt":"2026-03-02T09:00:40+00:00",
+															"rawSeconds":40,"roundedSeconds":60}
+															""";
+
+			await using (var connection = new SqliteConnection("Data Source=" + Path.Combine(root, "data", "gigtime", "gigtime.db")))
+			{
+				await connection.OpenAsync(TestContext.Current.CancellationToken);
+				await using var command = connection.CreateCommand();
+				command.CommandText = "UPDATE fi_doc_taskview SET data = $document WHERE id = 'aaaaaa'";
+				command.Parameters.AddWithValue("$document", document);
+				(await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken)).ShouldBe(1);
+			}
+
+			await using var store = OpenStore(root);
+			await using var query = store.QuerySession();
+			var task = (await query.LoadAsync<TaskView>("aaaaaa", TestContext.Current.CancellationToken))!;
+			task.Id.ShouldBe("aaaaaa");
+			task.ProjectId.ShouldBe(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+			task.RawSeconds.ShouldBe(40);
+			LegacySubmissionMigration.Decide(task).ShouldBe(new(at.AddSeconds(40), 60, "nearest-minute", 120m, "GBP"));
+		}
+		finally
+		{
+			Directory.Delete(root, true);
+		}
+	}
 
 	[Fact]
 	public async Task Legacy_stopped_and_backfilled_tasks_migrate_at_their_stop_with_original_figures_and_restart_is_a_noop()

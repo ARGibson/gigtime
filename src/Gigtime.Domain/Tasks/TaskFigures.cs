@@ -22,7 +22,10 @@ public sealed record TaskFigures(long RawSeconds, long RoundedSeconds, string Ro
 
 		var policy = catalogue.Resolve(task.ProjectId);
 		var rounded = TaskMath.Round(raw, policy.Rounding);
-		var rate = task.Rate?.Amount ?? policy.Rate;
+
+		var rate = task.Rate is { } own
+			? own.Currency == policy.Currency ? own.Amount : null
+			: policy.Rate;
 
 		return new(raw, rounded, policy.Rounding, rate, policy.Currency, rate * rounded / 3600m);
 	}
