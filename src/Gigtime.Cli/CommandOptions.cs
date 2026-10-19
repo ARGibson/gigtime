@@ -44,6 +44,7 @@ internal static class CommandOptions
 				"key" => "Set the new key.",
 				"currency" => "Set the currency code.",
 				"rate" => "Set the hourly rate.",
+				"state" => "Filter by task state.",
 				"ref" => "Set an opaque reference without task content.",
 				"client" => "Select the client key.",
 				"project" => "Select the project key.",
@@ -71,6 +72,7 @@ internal static class CommandOptions
 			Description = name switch
 			{
 				"all" => "Include archived or voided entries.",
+				"submit" => "Submit the task when stopping.",
 				"week" => "Report this week.",
 				"month" => "Report this month.",
 				"check" => "Inspect setup and health without changes.",

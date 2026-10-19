@@ -65,7 +65,7 @@ internal sealed class HumanOutput
 				break;
 			case TaskDto task:
 				Task(task);
-				if (command == "stop") console.WriteLine("Submit the rounded figure.");
+				if (command == "stop" && task.Submission is null) console.WriteLine("Submit the rounded figure.");
 
 				break;
 			case StatusDto { Task: { } task }:
@@ -133,6 +133,22 @@ internal sealed class HumanOutput
 				DurationText.Format(task.RoundedSeconds),
 			}
 		]);
+
+		console.WriteLine("Own rate: " + (task.Rate is { } rate ? rate.Amount + " " + rate.Currency : "project rate"));
+
+		if (task.Submission is { } submission)
+		{
+			console.WriteLine("Submitted: " + Instant(submission.SubmittedAt, zone));
+			console.WriteLine("Submission rounding: " + submission.Rounding);
+
+			console.WriteLine("Submission rate: " + (submission.Rate is { } fixedRate
+				? fixedRate.Amount + " " + fixedRate.Currency
+				: "none"));
+
+			console.WriteLine("Submission amount: " + (submission.Amount is { } amount
+				? amount.Rounded + " " + amount.Currency
+				: "not rated"));
+		}
 
 		var stopped = task.StoppedAt is null ? "open" : Instant(task.StoppedAt, zone);
 		console.WriteLine("Started: " + Instant(task.StartedAt, zone) + "  Stopped: " + stopped);

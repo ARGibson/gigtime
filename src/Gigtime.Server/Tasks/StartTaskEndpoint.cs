@@ -1,5 +1,6 @@
 using Gigtime.Contracts.Tasks;
 using Gigtime.Domain.Tasks;
+using Gigtime.Server.Catalogue;
 
 namespace Gigtime.Server.Tasks;
 
@@ -19,7 +20,8 @@ public static class StartTaskEndpoint
 			(id, catalogue) => new StartTask(id,
 				catalogue.FindProject(catalogue.FindClient(request.Client)?.Id ?? Guid.Empty, request.Project)?.Id ?? Guid.Empty,
 				request.Ref,
-				now),
+				now,
+				CatalogueWrites.Rate(request.Rate)),
 			true,
 			cancellationToken);
 	}

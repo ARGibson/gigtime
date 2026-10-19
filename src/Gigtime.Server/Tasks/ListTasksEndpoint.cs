@@ -12,7 +12,8 @@ public static class ListTasksEndpoint
 		CancellationToken cancellationToken,
 		[FromQuery] bool all = false,
 		[FromQuery] string? client = null,
-		[FromQuery] string? project = null)
+		[FromQuery] string? project = null,
+		[FromQuery] string? state = null)
 	{
 		var catalogue = (await documents.LoadAsync<CatalogueView>(CatalogueView.StreamId, cancellationToken))!;
 		var clientId = client is null ? null : catalogue.FindClient(client)?.Id;
@@ -25,15 +26,23 @@ public static class ListTasksEndpoint
 
 		var tasks = await documents.Query<TaskView>().ToListAsync(cancellationToken);
 
-		return new(catalogue, tasks.Where(t => ids.Contains(t.ProjectId) && (all || t.State != TaskState.Voided)).ToArray());
+		return new(catalogue,
+			tasks
+				.Where(t => ids.Contains(t.ProjectId) && (all || t.State != TaskState.Voided)
+					&& (state is null || string.Equals(t.State.ToString(), state, StringComparison.OrdinalIgnoreCase)))
+				.ToArray());
 	}
 
 	public static EnvelopeResult? Validate(
 		[NotBody] LoadedTaskList loaded,
 		[FromQuery] int? last = null,
 		[FromQuery] string? client = null,
-		[FromQuery] string? project = null)
+		[FromQuery] string? project = null,
+		[FromQuery] string? state = null)
 	{
+		if (state is not null && state is not ("stopped" or "submitted"))
+			return new("log", new("validation", "state must be stopped or submitted."));
+
 		if (last is <= 0) return new("log", new("validation", "last must be a positive integer."));
 
 		var clientId = client is null ? null : loaded.Catalogue.FindClient(client)?.Id;
@@ -53,7 +62,8 @@ public static class ListTasksEndpoint
 		[FromQuery] int? last = null,
 		[FromQuery] bool all = false,
 		[FromQuery] string? client = null,
-		[FromQuery] string? project = null)
+		[FromQuery] string? project = null,
+		[FromQuery] string? state = null)
 	{
 		var tasks = loaded
 			.Tasks.OrderByDescending(t => t.StartedAt)

@@ -19,11 +19,19 @@ public sealed class PersistenceTests
 		await app.CreateProjectAsync();
 
 		var started = (await app.PostAsync<TaskDto>("/v1/tasks/start",
-			new StartTaskRequest("example", "project"),
+			new StartTaskRequest("example", "project", Rate: "20"),
 			correlationId: "start-correlation")).Data!;
 
 		app.Clock.Now = app.Clock.Now.AddSeconds(45);
 		await app.PostAsync<TaskDto>("/v1/tasks/stop", correlationId: "stop-correlation");
+		await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/submit", correlationId: "submit-correlation");
+		await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/unsubmit", correlationId: "unsubmit-correlation");
+
+		await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/amend",
+			new AmendTaskInput(Rate: "21"),
+			correlationId: "rate-correlation");
+
+		await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/submit", correlationId: "resubmit-correlation");
 		var factory = app.Host.Services.GetRequiredService<IDocumentSessionFactory>();
 		await using var documents = factory.QuerySession();
 		var catalogue = new CatalogueView();
@@ -43,7 +51,14 @@ public sealed class PersistenceTests
 		}
 
 		var events = await documents.Events.FetchStreamAsync(started.Id, token: TestContext.Current.CancellationToken);
-		events.Select(e => e.CorrelationId).ShouldBe(["start-correlation", "stop-correlation"]);
+
+		events
+			.Select(e => e.CorrelationId)
+			.ShouldBe([
+				"start-correlation", "start-correlation", "stop-correlation", "submit-correlation",
+				"unsubmit-correlation", "rate-correlation", "resubmit-correlation",
+			]);
+
 		foreach (var e in events) task.Evolve(e.Data);
 		await using var session = factory.LightweightSession();
 

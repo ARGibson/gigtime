@@ -9,7 +9,7 @@ namespace Gigtime.Server.Tests;
 public sealed class LifecycleTests
 {
 	[Fact]
-	public async Task Lifecycle_uses_the_registered_clock_and_keeps_stopped_totals_after_catalogue_changes()
+	public async Task Lifecycle_uses_the_registered_clock_and_keeps_submitted_totals_after_catalogue_changes()
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.CreateProjectAsync();
@@ -29,15 +29,18 @@ public sealed class LifecycleTests
 		var stopped = (await app.PostAsync<TaskDto>("/v1/tasks/stop")).Data!;
 		stopped.RawSeconds.ShouldBe(90);
 		stopped.RoundedSeconds.ShouldBe(120);
-		stopped.Snapshot!.Rate!.Amount.ShouldBe("12.50");
+		stopped.Submission.ShouldBeNull();
+		stopped.Rate.ShouldBeNull();
 		stopped.Intervals.Select(i => i.Number).ShouldBe([1, 2]);
 		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task.ShouldBeNull();
+		var submitted = (await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/submit")).Data!;
+		submitted.Submission!.Rate!.Amount.ShouldBe("12.50");
 		await app.PatchAsync<ProjectDto>("/v1/clients/example/projects/project", new ChangeProjectRequest(Rate: "99"));
 		await app.PatchAsync<ClientDto>("/v1/clients/example", new ChangeClientRequest(Currency: "USD"));
 		var read = (await app.GetAsync<TaskDto>($"/v1/tasks/{started.Id}")).Data!;
 		read.RawSeconds.ShouldBe(stopped.RawSeconds);
 		read.RoundedSeconds.ShouldBe(stopped.RoundedSeconds);
-		read.Snapshot.ShouldBe(stopped.Snapshot);
+		read.Submission.ShouldBe(submitted.Submission);
 		var tasks = (await app.GetAsync<TasksDto>("/v1/tasks?last=1&client=example&project=project&all=true")).Data!.Tasks;
 		tasks.ShouldHaveSingleItem().Id.ShouldBe(started.Id);
 	}

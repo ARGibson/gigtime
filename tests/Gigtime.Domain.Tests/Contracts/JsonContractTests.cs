@@ -22,14 +22,15 @@ public sealed class JsonContractTests
 			client,
 			project,
 			null,
-			"stopped",
+			"submitted",
 			[new(1, start, start.AddSeconds(30))],
 			30,
 			60,
 			DurationText.Format(60),
-			new("nearest-minute", MoneyDto.From(123.45m, "USD"), "USD"),
+			new(start.AddMinutes(1), 60, "nearest-minute", MoneyDto.From(123.45m, "USD"), "USD", new("USD", "2.0575", "2.06")),
 			start,
-			start.AddSeconds(30));
+			start.AddSeconds(30),
+			Rate: MoneyDto.From(123.45m, "USD"));
 
 		var response = Envelopes.Success("stop", task);
 		var json = JsonSerializer.Serialize(response, GigtimeJsonContext.Default.TaskResponse);
@@ -48,13 +49,19 @@ public sealed class JsonContractTests
 		data.GetProperty("started_at").GetString().ShouldBe("2026-03-02T09:00:00Z");
 		data.GetProperty("client").GetProperty("key").GetString().ShouldBe("acme");
 		data.GetProperty("project").GetProperty("id").GetGuid().ShouldBe(project.Id);
-		data.GetProperty("snapshot").GetProperty("rate").GetProperty("amount").GetString().ShouldBe("123.45");
+		data.GetProperty("submission").GetProperty("rate").GetProperty("amount").GetString().ShouldBe("123.45");
+
+		data.GetProperty("submission").GetProperty("submitted_at").GetString().ShouldBe("2026-03-02T09:01:00Z");
+		data.GetProperty("submission").GetProperty("rounded_seconds").GetInt64().ShouldBe(60);
+		data.GetProperty("submission").GetProperty("amount").GetProperty("rounded").GetString().ShouldBe("2.06");
+		data.GetProperty("rate").GetProperty("amount").GetString().ShouldBe("123.45");
+		data.TryGetProperty("snapshot", out _).ShouldBeFalse();
 
 		var read = JsonSerializer.Deserialize(json, GigtimeJsonContext.Default.TaskResponse)!;
 
 		read.Data!.StartedAt.Offset.ShouldBe(TimeSpan.Zero);
 		read.Data.Intervals.Single().Start.ShouldBe(start);
-		read.Data.Snapshot!.Rate!.Currency.ShouldBe("USD");
+		read.Data.Submission!.Rate!.Currency.ShouldBe("USD");
 	}
 
 	[Fact]

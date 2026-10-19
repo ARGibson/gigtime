@@ -15,7 +15,7 @@ public sealed class FullDayTests(PublishedFixture published)
 		await day.StartAsync();
 		await day.CatalogueAsync();
 		(await day.SuccessAsync("defaults", "show")).GetProperty("timezone").GetString().ShouldBe("UTC");
-		var task = await day.SuccessAsync("start", "acme", "work", "--ref", "opaque-42");
+		var task = await day.SuccessAsync("start", "acme", "work", "--ref", "opaque-42", "--rate", "20");
 		var id = task.GetProperty("id").GetString()!;
 		(await day.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString().ShouldBe(id);
 		(await day.SuccessAsync("pause")).GetProperty("state").GetString().ShouldBe("paused");
@@ -47,7 +47,8 @@ public sealed class FullDayTests(PublishedFixture published)
 
 		amended.GetProperty("raw_seconds").GetInt64().ShouldBe(3600);
 		amended.GetProperty("rounded_seconds").GetInt64().ShouldBe(3600);
-		amended.GetProperty("snapshot").GetProperty("rate").GetProperty("amount").GetString().ShouldBe("20");
+		amended.GetProperty("submission").ValueKind.ShouldBe(JsonValueKind.Null);
+		amended.GetProperty("rate").GetProperty("amount").GetString().ShouldBe("20");
 		(await day.SuccessAsync("show", id)).GetRawText().ShouldBe(amended.GetRawText());
 
 		(await day.SuccessAsync("log", "--client", "acme", "--project", "work", "--last", "20"))

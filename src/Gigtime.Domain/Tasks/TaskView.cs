@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Gigtime.Domain.Catalogue;
 
 namespace Gigtime.Domain.Tasks;
@@ -10,12 +11,19 @@ public sealed class TaskView
 	public string? Ref { get; set; }
 	public TaskState State { get; set; }
 	public List<Interval> Timeline { get; init; } = [];
+
 	public IReadOnlyList<Interval> Intervals => Timeline.Where(i => i.End is null || i.End > i.Start).ToArray();
-	public PolicySnapshot? Snapshot { get; set; }
+
+	// #34: retained only to recognise legacy events for the one-off submission migration.
+	[Obsolete("Exists only for the legacy submission migration.")]
+	[JsonPropertyName("snapshot")]
+	public PolicySnapshot? LegacySnapshot { get; set; }
+
+	public TaskRate? Rate { get; set; }
+	public TaskSubmission? Submission { get; set; }
 	public DateTimeOffset? StartedAt { get; set; }
 	public DateTimeOffset? StoppedAt { get; set; }
 	public long RawSeconds => Timeline.Sum(i => i.Seconds);
-	public long RoundedSeconds => Snapshot is null ? RawSeconds : TaskMath.Round(RawSeconds, Snapshot.Rounding);
 
 	public long RawSecondsAt(DateTimeOffset now)
 	{
@@ -54,7 +62,9 @@ public sealed class TaskView
 		if (State == TaskState.Running) Close(e.At);
 		State = TaskState.Stopped;
 		StoppedAt = e.At;
-		Snapshot = new(e.Rounding, e.Rate, e.Currency);
+#pragma warning disable CS0618 // Legacy event projection retains the migration input.
+		LegacySnapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning restore CS0618
 	}
 
 	public void Apply(TaskRecorded e)
@@ -65,10 +75,26 @@ public sealed class TaskView
 		State = TaskState.Stopped;
 		StartedAt = e.Start;
 		StoppedAt = e.End;
-		Snapshot = new(e.Rounding, e.Rate, e.Currency);
+#pragma warning disable CS0618 // Legacy event projection retains the migration input.
+		LegacySnapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
+#pragma warning restore CS0618
 
 		Timeline.Add(new(1, e.Start, e.End));
 	}
+
+	public void Apply(TaskSubmitted e)
+	{
+		Submission = new(e.At, e.RoundedSeconds, e.Rounding, e.Rate, e.Currency);
+		State = TaskState.Submitted;
+	}
+
+	public void Apply(TaskUnsubmitted _)
+	{
+		Submission = null;
+		State = TaskState.Stopped;
+	}
+
+	public void Apply(TaskRateSet e) => Rate = e.Rate is { } amount && e.Currency is { } currency ? new(amount, currency) : null;
 
 	public void Apply(IntervalAmended e)
 	{
@@ -122,6 +148,18 @@ public sealed class TaskView
 
 				break;
 			case TaskRefChanged x:
+				Apply(x);
+
+				break;
+			case TaskSubmitted x:
+				Apply(x);
+
+				break;
+			case TaskUnsubmitted x:
+				Apply(x);
+
+				break;
+			case TaskRateSet x:
 				Apply(x);
 
 				break;

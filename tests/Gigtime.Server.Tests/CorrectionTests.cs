@@ -9,7 +9,7 @@ namespace Gigtime.Server.Tests;
 public sealed class CorrectionTests
 {
 	[Fact]
-	public async Task Backfill_does_not_touch_open_task_and_captures_the_current_policy()
+	public async Task Backfill_does_not_touch_open_task_and_leaves_figures_provisional()
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.CreateProjectAsync();
@@ -21,13 +21,14 @@ public sealed class CorrectionTests
 		added.State.ShouldBe("stopped");
 		added.RawSeconds.ShouldBe(91);
 		added.RoundedSeconds.ShouldBe(120);
-		added.Snapshot!.Rate!.Amount.ShouldBe("12.50");
+		added.Submission.ShouldBeNull();
+		added.Rate.ShouldBeNull();
 		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Id.ShouldBe(open.Id);
 		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(91);
 	}
 
 	[Fact]
-	public async Task Stopped_amendment_reuses_snapshot_and_overlap_rejection_is_atomic()
+	public async Task Stopped_amendment_uses_current_rate_and_overlap_rejection_is_atomic()
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.CreateProjectAsync();
@@ -45,7 +46,8 @@ public sealed class CorrectionTests
 
 		amended.RawSeconds.ShouldBe(211);
 		amended.RoundedSeconds.ShouldBe(240);
-		amended.Snapshot!.Rate!.Amount.ShouldBe("12.50");
+		amended.Submission.ShouldBeNull();
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().EstimatedEarnings!.Rounded.ShouldBe("6.67");
 		amended.Ref.ShouldBe("fixed");
 
 		var refused = await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/amend",
@@ -61,7 +63,7 @@ public sealed class CorrectionTests
 	}
 
 	[Fact]
-	public async Task Local_and_clock_times_use_client_timezone_and_reassignment_keeps_snapshot()
+	public async Task Local_and_clock_times_use_client_timezone_and_reassignment_uses_current_project_rate()
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("ny", "New York", "USD", "America/New_York"));
@@ -72,7 +74,8 @@ public sealed class CorrectionTests
 		task.StoppedAt!.Value.Hour.ShouldBe(15);
 		var changed = (await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/amend", new AmendTaskInput(Client: "ny", Project: "two"))).Data!;
 		changed.Project.Key.ShouldBe("two");
-		changed.Snapshot!.Rate!.Amount.ShouldBe("20");
+		changed.Submission.ShouldBeNull();
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().EstimatedEarnings!.Rounded.ShouldBe("50.00");
 
 		(await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "one", "2026-03-08T02:15", "2026-03-08T04:00"), 422))
 			.Error!.Code.ShouldBe("validation");

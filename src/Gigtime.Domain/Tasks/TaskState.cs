@@ -7,4 +7,5 @@ public enum TaskState
 	Paused,
 	Stopped,
 	Voided,
+	Submitted,
 }

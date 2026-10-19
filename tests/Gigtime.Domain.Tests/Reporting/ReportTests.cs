@@ -71,6 +71,14 @@ public sealed class ReportTests
 		var s = new TaskScenario();
 		var first = Recorded(s, "111111", "2026-03-02T09:01:00Z");
 		var second = Recorded(s, "222222", "2026-03-02T09:02:00Z");
+
+		foreach (var task in new[] { first, second })
+		{
+			var submitted = TaskDecider.Decide(task, s.Tracker, s.Catalogue.State, new SubmitTask(TaskScenario.At.AddHours(1)));
+			submitted.Error.ShouldBeNull();
+			task.Evolve(submitted.Events.Single());
+		}
+
 		var voided = Recorded(s, "333333", "2026-03-02T09:03:00Z");
 		var voidDecision = TaskDecider.Decide(voided, s.Tracker, s.Catalogue.State, new VoidTask());
 
@@ -133,6 +141,27 @@ public sealed class ReportTests
 					ProjectId = s.Catalogue.ProjectId
 				})
 			.Count.ShouldBe(1);
+	}
+
+	[Fact]
+	public void Report_uses_current_provisional_rates_then_frozen_submission_rates_until_unsubmitted()
+	{
+		var s = new TaskScenario();
+		s.Start();
+		s.Send(new StopTask(TaskScenario.At.AddHours(1)));
+		var query = new ReportQuery(TaskScenario.At);
+		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(180m)));
+		ReportMath.Calculate([s.Task], s.Catalogue.State, query).Single().Earnings.ShouldBe(180m);
+		s.Send(new SubmitTask(TaskScenario.At.AddHours(2)));
+		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(240m)));
+		ReportMath.Calculate([s.Task], s.Catalogue.State, query).Single().Earnings.ShouldBe(180m);
+		s.Send(new UnsubmitTask(TaskScenario.At.AddHours(3)));
+		ReportMath.Calculate([s.Task], s.Catalogue.State, query).Single().Earnings.ShouldBe(240m);
+		s.Send(new SetTaskRate(0m));
+		ReportMath.Calculate([s.Task], s.Catalogue.State, query).Single().Earnings.ShouldBe(0m);
+		s.Send(new SetTaskRate(null));
+		s.Catalogue.Send(new ChangeProject(s.Catalogue.ProjectId, Rate: Change.Set<decimal?>(null)));
+		ReportMath.Calculate([s.Task], s.Catalogue.State, query).Single().Earnings.ShouldBeNull();
 	}
 
 	private static DateTimeOffset At(string instant) => DateTimeOffset.Parse(instant, CultureInfo.InvariantCulture);

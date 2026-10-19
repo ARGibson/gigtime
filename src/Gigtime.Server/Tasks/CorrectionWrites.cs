@@ -1,5 +1,6 @@
 using Gigtime.Contracts.Tasks;
 using Gigtime.Domain.Tasks;
+using Gigtime.Server.Catalogue;
 
 namespace Gigtime.Server.Tasks;
 
@@ -72,7 +73,13 @@ public static class CorrectionWrites
 		var commands = new List<TaskCommand>();
 		var projectId = task.ProjectId;
 
-		if (task.State == TaskState.Missing) return new([new ChangeTaskRef(null)]);
+		if (task.State is TaskState.Missing or TaskState.Submitted) return new([new ChangeTaskRef(null)]);
+		if (request.Rate is not null && request.ClearRate) return Invalid("rate and clear_rate cannot be combined.");
+
+		var rate = request.Rate is not null || request.ClearRate
+			? Change.Set(CatalogueWrites.Rate(request.Rate))
+			: default(Change<decimal?>);
+
 		if (request.Ref is not null && request.ClearRef) return Invalid("ref and clear_ref cannot be combined.");
 
 		if (request.Client is not null || request.Project is not null)
@@ -84,7 +91,12 @@ public static class CorrectionWrites
 			if (project is null) return new([], new("not_found", "The client or project does not exist."));
 
 			projectId = project.Id;
-			commands.Add(new ReassignTask(project.Id));
+			commands.Add(new ReassignTask(project.Id, rate));
+		}
+
+		else if (rate.IsSpecified)
+		{
+			commands.Add(new SetTaskRate(rate.Value));
 		}
 
 		if (request.Start is not null || request.End is not null)
@@ -132,7 +144,7 @@ public static class CorrectionWrites
 		if (!InputTime.TryResolve(request.Start, zone, now, out var start) || !InputTime.TryResolve(request.End, zone, now, out var end))
 			return Invalid("Invalid or ambiguous time; supply an ISO offset.");
 
-		return new([new RecordTask(id, project.Id, request.Ref, start, end)]);
+		return new([new RecordTask(id, project.Id, request.Ref, start, end, CatalogueWrites.Rate(request.Rate))]);
 	}
 
 	private static CorrectionIntent Invalid(string message) => new([], new("validation", message));

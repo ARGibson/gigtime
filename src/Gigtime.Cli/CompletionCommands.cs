@@ -19,12 +19,14 @@ internal static class CompletionCommands
 		Argument(live, "kind");
 		Argument(live, "prefix", true);
 		Text(live, "client");
+		Text(live, "state");
 
 		live.SetAction(async (r, ct) =>
 		{
 			await CompleteAsync(r.GetValue<string>("kind")!,
 				r.GetValue<string>("prefix") ?? "",
 				r.GetValue<string>("--client"),
+				r.GetValue<string>("--state"),
 				output,
 				paths,
 				ct);
@@ -36,6 +38,7 @@ internal static class CompletionCommands
 	private static async Task CompleteAsync(string kind,
 		string prefix,
 		string? clientKey,
+		string? state,
 		TextWriter output,
 		Func<IPlatformPaths> paths,
 		CancellationToken cancellationToken)
@@ -76,7 +79,7 @@ internal static class CompletionCommands
 			{
 				"clients" => "/v1/clients",
 				"projects" => "/v1/projects" + Query(("client", clientKey)),
-				_ => "/v1/tasks?last=20"
+				_ => "/v1/tasks" + Query(("last", "20"), ("state", state))
 			};
 
 			var body = await http.GetStringAsync("http://localhost" + path, timeout.Token);

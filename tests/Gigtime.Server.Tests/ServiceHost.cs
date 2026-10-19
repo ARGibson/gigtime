@@ -9,23 +9,39 @@ namespace Gigtime.Server.Tests;
 
 public sealed class ServiceHost : IAsyncDisposable
 {
-	public string DirectoryPath { get; } = Path.Combine(Path.GetTempPath(), $"gigtime-test-{Guid.NewGuid():N}");
+	public string DirectoryPath { get; private init; } = Path.Combine(Path.GetTempPath(), $"gigtime-test-{Guid.NewGuid():N}");
 	public IAlbaHost Host { get; private set; } = null!;
 	public TestClock Clock { get; } = new();
 
-	public static async Task<ServiceHost> StartAsync()
+	public static async Task<ServiceHost> StartAsync(string? directory = null)
 	{
-		var fixture = new ServiceHost();
+		var fixture = directory is null
+			? new ServiceHost()
+			: new ServiceHost
+			{
+				DirectoryPath = directory
+			};
 
-		fixture.Host = await AlbaHost.For<Program>(builder => builder.ConfigureServices(services =>
-		{
-			services.RemoveAll<IPlatformPaths>();
-			services.AddSingleton<IPlatformPaths>(new TestPaths(fixture.DirectoryPath));
-			services.RemoveAll<TimeProvider>();
-			services.AddSingleton<TimeProvider>(fixture.Clock);
-		}));
+		await fixture.StartHostAsync();
 
 		return fixture;
+	}
+
+	public async Task RestartAsync()
+	{
+		await Host.DisposeAsync();
+		await StartHostAsync();
+	}
+
+	private async Task StartHostAsync()
+	{
+		Host = await AlbaHost.For<Program>(builder => builder.ConfigureServices(services =>
+		{
+			services.RemoveAll<IPlatformPaths>();
+			services.AddSingleton<IPlatformPaths>(new TestPaths(DirectoryPath));
+			services.RemoveAll<TimeProvider>();
+			services.AddSingleton<TimeProvider>(Clock);
+		}));
 	}
 
 	public async Task<Envelope<T>> GetAsync<T>(string url, int status = 200) where T : class

@@ -85,7 +85,11 @@ public sealed class ReportTests
 		foreach (var key in new[] { "a", "b" })
 		{
 			await app.PostAsync<ProjectDto>("/v1/clients/one/projects", new AddProjectRequest(key, Rate: "0.3"));
-			await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"));
+
+			var task = (await app.PostAsync<TaskDto>("/v1/tasks/add",
+				new RecordTaskInput("one", key, "2026-03-02T08:00:00Z", "2026-03-02T08:01:00Z"))).Data!;
+
+			await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/submit");
 		}
 
 		await app.PatchAsync<ClientDto>("/v1/clients/one", new ChangeClientRequest(Currency: "USD"));
