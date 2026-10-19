@@ -18,4 +18,4 @@ public sealed record UnsubmittedTask(
 	string? Ref,
 	TaskState State,
 	TaskFigures Figures,
-	TaskRate? Rate = null);
+	TaskRate? Rate);

@@ -162,15 +162,25 @@
         "dependencies": {
           "Gigtime.Contracts": "[1.0.0, )",
           "Gigtime.Platform": "[1.0.0, )",
+          "NodaTime": "[3.3.5, )",
           "Spectre.Console": "[0.57.2, )",
           "System.CommandLine": "[2.0.13, )"
         }
       },
       "gigtime.contracts": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "NodaTime": "[3.3.5, )"
+        }
       },
       "gigtime.platform": {
         "type": "Project"
+      },
+      "NodaTime": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.5, )",
+        "resolved": "3.3.5",
+        "contentHash": "0qtGKHOYhQGCeUItP4RN8KJktsKD9j/B4IqmoecUL+ymReq69O71qEpZY6x0aQPZa5KDLXY41aEOOHZ9T6Uqgw=="
       },
       "Spectre.Console": {
         "type": "CentralTransitive",

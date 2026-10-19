@@ -55,7 +55,11 @@ public static class StoreRegistration
 					session.CorrelationId = "bootstrap";
 
 					if (await session.Events.FetchStreamStateAsync(CatalogueView.StreamId, token) is null)
-						session.Events.StartStream<CatalogueView>(CatalogueView.StreamId, new DefaultsChanged(TimeZoneInfo.Local.Id));
+					{
+						// #35: BCL discovers only the host's id; bundled TZDB supplies every timezone rule.
+						var timezone = TimeZones.Get(TimeZoneInfo.Local.Id);
+						session.Events.StartStream<CatalogueView>(CatalogueView.StreamId, new DefaultsChanged(timezone.Id));
+					}
 
 					if (await session.Events.FetchStreamStateAsync(OpenTask.StreamId, token) is null)
 						session.Events.StartStream<OpenTask>(OpenTask.StreamId, new OpenTaskCleared());

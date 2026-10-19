@@ -1,4 +1,5 @@
 using Gigtime.Domain.Catalogue;
+using NodaTime;
 
 namespace Gigtime.Domain.Reporting;
 
@@ -7,7 +8,7 @@ public sealed record ReportPeriod(DateOnly From, DateOnly UntilExclusive)
 {
 	public bool Contains(DateTimeOffset instant, string timezone)
 	{
-		var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, TimeZoneInfo.FindSystemTimeZoneById(timezone)).DateTime);
+		var date = Date(instant, timezone);
 
 		return date >= From && date < UntilExclusive;
 	}
@@ -16,7 +17,7 @@ public sealed record ReportPeriod(DateOnly From, DateOnly UntilExclusive)
 	{
 		ArgumentNullException.ThrowIfNull(query);
 		ArgumentNullException.ThrowIfNull(settings);
-		var local = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(query.At, TimeZoneInfo.FindSystemTimeZoneById(settings.Timezone)).DateTime);
+		var local = Date(query.At, settings.Timezone);
 
 		return query.Kind switch
 		{
@@ -25,6 +26,13 @@ public sealed record ReportPeriod(DateOnly From, DateOnly UntilExclusive)
 			PeriodKind.Range when query.From is { } from && query.UntilExclusive is { } until && until > from => new(from, until),
 			_ => throw new ArgumentException("Supply an ordered local date range or a supported period.", nameof(query)),
 		};
+	}
+
+	private static DateOnly Date(DateTimeOffset instant, string timezone)
+	{
+		var date = Instant.FromDateTimeOffset(instant).InZone(TimeZones.Get(timezone)).Date;
+
+		return new(date.Year, date.Month, date.Day);
 	}
 
 	private static ReportPeriod Week(DateOnly date, DayOfWeek weekStarts)

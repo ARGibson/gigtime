@@ -46,6 +46,33 @@ public sealed class TimesheetTests
 		json.ShouldNotContain("rate");
 	}
 
+	[Fact]
+	public async Task Backfilled_time_at_a_backwards_date_transition_appears_in_each_one_day_range()
+	{
+		await using var app = await ServiceHost.StartAsync();
+		await app.PostAsync<ClientDto>("/v1/clients", new AddClientRequest("sj", "St Johns", "CAD", "America/St_Johns"));
+		await app.PostAsync<ProjectDto>("/v1/clients/sj/projects", new AddProjectRequest("work"));
+
+		var task = (await app.PostAsync<TaskDto>("/v1/tasks/add",
+			new RecordTaskInput("sj", "work", "2010-11-07T02:30:00Z", "2010-11-07T02:32:00Z"))).Data!;
+
+		var both = (await app.GetAsync<TimesheetDto>("/v1/timesheet?range=2010-11-06..2010-11-07")).Data!;
+		both.Days.Select(day => day.Date).ShouldBe(["2010-11-06", "2010-11-07"]);
+		both.Days.Select(day => day.RawSeconds).ShouldBe([60L, 60L]);
+
+		foreach (var date in new[] { "2010-11-06", "2010-11-07" })
+		{
+			var sheet = (await app.GetAsync<TimesheetDto>($"/v1/timesheet?range={date}..{date}")).Data!;
+			var day = sheet.Days.ShouldHaveSingleItem();
+			day.Date.ShouldBe(date);
+			day.RawSeconds.ShouldBe(60);
+			day.Tasks.ShouldHaveSingleItem().TaskId.ShouldBe(task.Id);
+			day.Tasks[0].RawSeconds.ShouldBe(60);
+			sheet.Projects.ShouldHaveSingleItem().RawSeconds.ShouldBe(60);
+			sheet.Clients.ShouldHaveSingleItem().RawSeconds.ShouldBe(60);
+		}
+	}
+
 	[Theory]
 	[InlineData("timesheet")]
 	[InlineData("report")]

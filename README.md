@@ -278,12 +278,12 @@ and client. It contains raw time only, with no rounding or money.
 `report` settles submitted tasks using their fixed rounded totals and amounts. Its
 Unsubmitted section lists every running, paused or stopped task with provisional figures,
 including tasks outside the selected period. Client and project filters apply to both
-sections. Its nullable `rate` is the task's own rate, in the same money shape as a
-task's `rate`. A stale-currency own rate leaves `amount` null and renders as `unpriced`;
-a task without a rate renders as `not rated`. Unsubmitting removes a task from settled
-totals; resubmitting places it in the new submission's period. Migrated tasks keep
-their old stop instant as their submission instant, preserving historical settlement
-totals.
+sections. Each unsubmitted row's nullable `rate` is the task's own rate, in the same
+money shape as a task's `rate`. A stale-currency own rate leaves `amount` null and
+renders as `unpriced`. `not rated` means neither the task nor its project has a rate.
+Unsubmitting removes a task from settled totals; resubmitting places it in the new
+submission's period. Migrated tasks keep their old stop instant as their submission
+instant, preserving historical settlement totals.
 
 Human task times use the effective client timezone, printed once as `Times in
 America/New_York` (or the selected IANA zone). Instants on today in that zone use

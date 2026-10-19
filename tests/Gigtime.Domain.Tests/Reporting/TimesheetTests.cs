@@ -1,6 +1,7 @@
 using Gigtime.Domain.Catalogue;
 using Gigtime.Domain.Reporting;
 using Gigtime.Domain.Tasks;
+using NodaTime;
 using Shouldly;
 using Xunit;
 using static Gigtime.Domain.Tests.Reporting.ReportScenario;
@@ -100,7 +101,7 @@ public sealed class TimesheetTests
 	[Theory]
 	[InlineData("0001-01-01T00:00:00Z", "0001-01-01T01:00:00Z", 1, 1, 1, 3600)]
 	[InlineData("9999-12-30T23:30:00Z", "9999-12-31T00:30:00Z", 9999, 12, 30, 1800)]
-	public void Midnight_search_clamps_to_the_supported_instant_range(
+	public void Day_splitting_handles_the_supported_instant_range(
 		string start,
 		string end,
 		int year,
@@ -147,6 +148,23 @@ public sealed class TimesheetTests
 		result.Clients.ShouldHaveSingleItem().RawSeconds.ShouldBe(3600);
 	}
 
+	[Theory]
+	[InlineData(6, 8, 2)]
+	[InlineData(6, 7, 1)]
+	[InlineData(7, 8, 1)]
+	public void A_backwards_date_transition_assigns_each_minute_to_its_own_day(int fromDay, int untilDay, int days)
+	{
+		var s = new ReportScenario("America/St_Johns");
+		s.Record("111111", "2010-11-07T02:30:00Z", "2010-11-07T02:32:00Z");
+		var query = new ReportQuery(Now, PeriodKind.Range, new(2010, 11, fromDay), new(2010, 11, untilDay));
+		var result = TimesheetMath.Calculate(s.Tasks, s.Catalogue.State, query, Now);
+		result.Days.Count.ShouldBe(days);
+		result.Days.Select(day => day.Date).ShouldBe(Enumerable.Range(fromDay, days).Select(day => new DateOnly(2010, 11, day)));
+		result.Days.ShouldAllBe(day => day.RawSeconds == 60 && day.Tasks.Single().RawSeconds == 60);
+		result.Projects.ShouldHaveSingleItem().RawSeconds.ShouldBe(days * 60);
+		result.Clients.ShouldHaveSingleItem().RawSeconds.ShouldBe(days * 60);
+	}
+
 	[Fact]
 	public void Sitkas_repeated_date_never_moves_the_interval_cursor_backwards()
 	{
@@ -160,6 +178,12 @@ public sealed class TimesheetTests
 	}
 
 	[Theory]
+	[InlineData("America/St_Johns", "2010-11-07T02:30:00Z", "2010-11-07T02:32:00Z", "2010-11-06", "2010-11-08")]
+	[InlineData("America/St_Johns", "2010-11-07T02:30:00Z", "2010-11-07T02:32:00Z", "2010-11-06", "2010-11-07")]
+	[InlineData("America/St_Johns", "2010-11-07T02:30:00Z", "2010-11-07T02:32:00Z", "2010-11-07", "2010-11-08")]
+	[InlineData("Europe/Dublin", "2026-10-25T00:30:00Z", "2026-10-25T02:30:00Z", "2026-10-25", "2026-10-26")]
+	[InlineData("Asia/Kathmandu", "1985-12-31T18:00:00Z", "1985-12-31T19:00:00Z", "1985-12-31", "1986-01-02")]
+	[InlineData("America/New_York", "2050-03-13T06:30:00Z", "2050-03-13T08:30:00Z", "2050-03-13", "2050-03-14")]
 	[InlineData("UTC", "2026-03-01T23:30:00Z", "2026-03-03T00:30:00Z", "2026-03-02", "2026-03-03")]
 	[InlineData("America/New_York", "2026-03-08T04:30:00Z", "2026-03-09T04:30:00Z", "2026-03-08", "2026-03-09")]
 	[InlineData("America/New_York", "2026-11-01T03:30:00Z", "2026-11-02T05:30:00Z", "2026-11-01", "2026-11-02")]
@@ -169,7 +193,7 @@ public sealed class TimesheetTests
 	[InlineData("Pacific/Apia", "2011-12-30T09:30:00Z", "2011-12-30T10:30:00Z", "2011-12-30", "2011-12-31")]
 	[InlineData("America/Sitka", "1867-10-19T00:40:00Z", "1867-10-19T01:40:00Z", "1867-10-18", "1867-10-20")]
 	[InlineData("America/Sitka", "1867-10-19T00:20:00Z", "1867-10-19T01:40:00Z", "1867-10-18", "1867-10-20")]
-	public void Day_slices_conserve_every_second_of_the_interval_that_falls_in_the_period(
+	public void Day_slices_match_each_local_dates_seconds_in_the_period(
 		string zone,
 		string start,
 		string end,
@@ -185,20 +209,24 @@ public sealed class TimesheetTests
 			DateOnly.Parse(until, System.Globalization.CultureInfo.InvariantCulture));
 
 		var period = ReportPeriod.For(query, s.Catalogue.State.Resolve(s.Catalogue.ProjectId));
-		long expected = 0;
+		var expected = new SortedDictionary<DateOnly, long>();
+		var timezone = DateTimeZoneProviders.Tzdb[zone];
 
-		// Check local-date membership directly, independently of the splitter's midnight search.
+		// Check every second's local date independently of transition and midnight enumeration.
 		for (var instant = At(start); instant < At(end); instant = instant.AddSeconds(1))
 		{
-			if (period.Contains(instant, zone)) expected++;
+			var date = DateOnly.FromDateTime(Instant.FromDateTimeOffset(instant).InZone(timezone).ToDateTimeUnspecified());
+			if (date >= period.From && date < period.UntilExclusive) expected[date] = expected.GetValueOrDefault(date) + 1;
 		}
 
 		var result = TimesheetMath.Calculate(s.Tasks, s.Catalogue.State, query, query.At);
-		result.Days.Sum(day => day.RawSeconds).ShouldBe(expected);
-		result.Days.Sum(day => day.Tasks.Sum(task => task.RawSeconds)).ShouldBe(expected);
-		result.Projects.Sum(project => project.RawSeconds).ShouldBe(expected);
-		result.Clients.Sum(client => client.RawSeconds).ShouldBe(expected);
-		result.Days.ShouldAllBe(day => day.RawSeconds > 0);
+		result.Days.Select(day => (day.Date, day.RawSeconds)).ShouldBe(expected.Select(pair => (pair.Key, pair.Value)));
+		var total = expected.Values.Sum();
+		result.Days.Sum(day => day.RawSeconds).ShouldBe(total);
+		result.Days.Sum(day => day.Tasks.Sum(task => task.RawSeconds)).ShouldBe(total);
+		result.Projects.Sum(project => project.RawSeconds).ShouldBe(total);
+		result.Clients.Sum(client => client.RawSeconds).ShouldBe(total);
+		result.Days.ShouldAllBe(day => day.RawSeconds > 0 && day.Tasks.Sum(task => task.RawSeconds) == day.RawSeconds);
 	}
 
 	[Fact]

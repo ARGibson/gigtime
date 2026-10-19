@@ -494,12 +494,16 @@
         }
       },
       "gigtime.contracts": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "NodaTime": "[3.3.5, )"
+        }
       },
       "gigtime.domain": {
         "type": "Project",
         "dependencies": {
-          "JasperFx.Events": "[2.90.1, )"
+          "JasperFx.Events": "[2.90.1, )",
+          "NodaTime": "[3.3.5, )"
         }
       },
       "JasperFx.Events": {
@@ -510,6 +514,12 @@
         "dependencies": {
           "JasperFx": "2.90.1"
         }
+      },
+      "NodaTime": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.5, )",
+        "resolved": "3.3.5",
+        "contentHash": "0qtGKHOYhQGCeUItP4RN8KJktsKD9j/B4IqmoecUL+ymReq69O71qEpZY6x0aQPZa5KDLXY41aEOOHZ9T6Uqgw=="
       },
       "Spectre.Console": {
         "type": "CentralTransitive",

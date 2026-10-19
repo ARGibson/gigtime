@@ -3,6 +3,7 @@ using Gigtime.Contracts;
 using Gigtime.Contracts.Catalogue;
 using Gigtime.Contracts.Reporting;
 using Gigtime.Contracts.Tasks;
+using NodaTime;
 using Spectre.Console;
 
 namespace Gigtime.Cli;
@@ -155,7 +156,7 @@ internal sealed class HumanOutput
 
 	private void Task(TaskDto task)
 	{
-		var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+		var zone = TimeZones.Get(task.Timezone);
 		console.WriteLine("Times in " + task.Timezone);
 
 		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
@@ -206,7 +207,7 @@ internal sealed class HumanOutput
 				console.WriteLine("Times in " + timezone);
 			}
 
-			var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+			var zone = TimeZones.Get(task.Timezone);
 
 			rows.Add([
 				task.Id, task.Client.Key, task.Project.Key, task.Ref ?? "", task.State,
@@ -218,12 +219,12 @@ internal sealed class HumanOutput
 		Table(headings, rows);
 	}
 
-	private string Instant(DateTimeOffset? instant, TimeZoneInfo zone)
+	private string Instant(DateTimeOffset? instant, DateTimeZone zone)
 	{
 		if (instant is null) return "running";
 
-		var local = TimeZoneInfo.ConvertTime(instant.Value, zone);
-		var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+		var local = NodaTime.Instant.FromDateTimeOffset(instant.Value).InZone(zone).LocalDateTime;
+		var today = NodaTime.Instant.FromDateTimeOffset(now).InZone(zone).Date;
 
 		return local.ToString(local.Date == today ? "HH:mm" : "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 	}

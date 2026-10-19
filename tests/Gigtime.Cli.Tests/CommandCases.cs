@@ -143,7 +143,8 @@ internal static class CommandCases
 								60,
 								60,
 								"00:01:00",
-								new("GBP", "0.50", "0.50"))
+								new("GBP", "0.50", "0.50"),
+								null)
 						])),
 				GigtimeJsonContext.Default.ReportResponse),
 

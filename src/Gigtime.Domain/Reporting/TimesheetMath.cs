@@ -1,5 +1,6 @@
 using Gigtime.Domain.Catalogue;
 using Gigtime.Domain.Tasks;
+using NodaTime;
 
 namespace Gigtime.Domain.Reporting;
 
@@ -16,26 +17,40 @@ public static class TimesheetMath
 		{
 			var settings = catalogue.Resolve(task.ProjectId);
 			var period = ReportPeriod.For(query, settings);
-			var zone = TimeZoneInfo.FindSystemTimeZoneById(settings.Timezone);
-			var from = Midnight(period.From, zone);
-			var until = Midnight(period.UntilExclusive, zone);
+			var zone = TimeZones.Get(settings.Timezone);
+			var from = new LocalDate(period.From.Year, period.From.Month, period.From.Day);
+			var until = new LocalDate(period.UntilExclusive.Year, period.UntilExclusive.Month, period.UntilExclusive.Day);
 
 			foreach (var interval in task.Intervals)
 			{
-				var start = interval.Start > from ? interval.Start : from;
-				var end = interval.End ?? TaskMath.Instant(now);
-				if (end > until) end = until;
+				var start = Instant.FromDateTimeOffset(interval.Start);
+				var end = Instant.FromDateTimeOffset(interval.End ?? TaskMath.Instant(now));
 
-				while (start < end)
+				if (start >= end) continue;
+
+				// #35: an offset change can move the local date backwards. TZDB supplies
+				// constant-offset stretches; filter each piece by date, not UTC bounds.
+				foreach (var stretch in zone.GetZoneIntervals(start, end))
 				{
-					var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(start, zone).DateTime);
-					var next = Midnight(date.AddDays(1), zone);
-					// #35: a backwards date shift can put the first midnight before this interval.
-					if (next <= start) next = Midnight(date.AddDays(1), zone, start);
-					var boundary = next > start && next < end ? next : end;
-					var seconds = (boundary - start).Ticks / TimeSpan.TicksPerSecond;
-					if (seconds > 0) slices.Add((date, task, seconds));
-					start = boundary;
+					var cursor = stretch.HasStart && stretch.Start > start ? stretch.Start : start;
+					var limit = stretch.HasEnd && stretch.End < end ? stretch.End : end;
+
+					while (cursor < limit)
+					{
+						var date = cursor.WithOffset(stretch.WallOffset).Date;
+
+						var midnight = date == LocalDate.MaxIsoValue
+							? limit
+							: date.PlusDays(1).AtMidnight().WithOffset(stretch.WallOffset).ToInstant();
+
+						var boundary = midnight < limit ? midnight : limit;
+						var seconds = (boundary - cursor).BclCompatibleTicks / TimeSpan.TicksPerSecond;
+
+						if (seconds > 0 && date >= from && date < until)
+							slices.Add((new(date.Year, date.Month, date.Day), task, seconds));
+
+						cursor = boundary;
+					}
 				}
 			}
 		}
@@ -66,31 +81,5 @@ public static class TimesheetMath
 			.ToArray();
 
 		return new(days, projects, clients);
-	}
-
-	private static DateTimeOffset Midnight(DateOnly date, TimeZoneInfo zone, DateTimeOffset? after = null)
-	{
-		// #35: search real instants rather than trusting IsInvalidTime. Entire skipped dates
-		// (for example Apia in 2011) can round-trip to a different date without being marked invalid.
-		var nominal = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).Ticks;
-		var low = after?.UtcTicks ?? Math.Max(DateTimeOffset.MinValue.UtcTicks, nominal - 2 * TimeSpan.TicksPerDay);
-		var high = Math.Min(DateTimeOffset.MaxValue.UtcTicks, (after?.UtcTicks ?? nominal) + 2 * TimeSpan.TicksPerDay);
-		var first = new DateTimeOffset(low, TimeSpan.Zero);
-
-		if (DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(first, zone).DateTime) >= date) return first;
-
-		while (high - low > 1)
-		{
-			var middle = low + (high - low) / 2;
-			var instant = new DateTimeOffset(middle, TimeSpan.Zero);
-			var local = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, zone).DateTime);
-
-			if (local < date) low = middle;
-			else high = middle;
-		}
-
-		// This finds the first occurrence of a repeated midnight, or the first real
-		// instant after a midnight/date gap; a wholly skipped date has a zero-length day.
-		return new(high, TimeSpan.Zero);
 	}
 }

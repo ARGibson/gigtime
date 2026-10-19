@@ -55,6 +55,43 @@ public sealed class LocalTimeRenderingTests
 		rendered.ShouldNotContain("(UTC)");
 	}
 
+	[Theory]
+	[InlineData("US/Eastern")]
+	[InlineData("america/new_york")]
+	[InlineData("Eastern Standard Time")]
+	public async Task Legacy_timezone_links_case_and_Windows_ids_keep_local_display(string timezone)
+	{
+		var rendered = await RenderAsync("show",
+			[TimedTask(timezone, "2026-03-03T00:30:00Z", "2026-03-03T01:15:00Z")],
+			"2026-03-03T02:00:00Z");
+
+		rendered.ShouldContain("Times in " + timezone);
+		rendered.ShouldContain("Started: 19:30  Stopped: 20:15");
+	}
+
+	[Theory]
+	[InlineData("show")]
+	[InlineData("log")]
+	public async Task Unsupported_stored_timezone_returns_validation_with_a_repair_message(string command)
+	{
+		var task = TimedTask("not/a-zone", "2026-03-03T00:30:00Z", "2026-03-03T01:15:00Z");
+
+		var response = command == "log"
+			? JsonSerializer.Serialize(Envelopes.Success(command, new TasksDto([task])), GigtimeJsonContext.Default.TasksResponse)
+			: JsonSerializer.Serialize(Envelopes.Success(command, task), GigtimeJsonContext.Default.TaskResponse);
+
+		await using var server = await FakeServer.StartAsync(response);
+		using var output = new StringWriter(CultureInfo.InvariantCulture);
+		using var error = new StringWriter(CultureInfo.InvariantCulture);
+		var paths = server.Paths;
+		var app = new CliApplication(output, error, false, false, () => paths);
+
+		(await app.RunAsync(CommandCases.Args(command), TestContext.Current.CancellationToken)).ShouldBe(8);
+		error.ToString().ShouldContain("validation");
+		error.ToString().ShouldContain("not/a-zone");
+		error.ToString().ShouldContain("Set the client or defaults timezone");
+	}
+
 	[Fact]
 	public async Task Log_keeps_newest_first_order_and_labels_each_contiguous_zone_block()
 	{
