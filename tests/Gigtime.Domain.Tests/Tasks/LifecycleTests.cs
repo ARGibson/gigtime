@@ -66,7 +66,7 @@ public sealed class LifecycleTests
 				(TaskState.Running or TaskState.Paused, "void" or "start" or "add") => "gig stop",
 				(TaskState.Paused, "pause") => "gig resume",
 				(TaskState.Stopped or TaskState.Voided, "start" or "add") => null,
-				(TaskState.Stopped, "pause" or "resume" or "stop") => "gig start",
+				(TaskState.Stopped, "pause" or "stop") => "gig resume " + s.Task.Id,
 				(TaskState.Voided, _) => "gig start",
 				_ => null
 			};

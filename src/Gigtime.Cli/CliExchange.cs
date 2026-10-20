@@ -158,7 +158,8 @@ internal sealed class CliExchange(
 
 						retryContent = JsonContent.Create(start with
 						{
-							Switch = true
+							Switch = true,
+							SwitchFrom = refusal.State!.TaskId,
 						},
 							GigtimeJsonContext.Default.StartTaskRequest);
 					}

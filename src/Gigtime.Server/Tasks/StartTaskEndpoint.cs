@@ -22,7 +22,8 @@ public static class StartTaskEndpoint
 				request.Ref,
 				now,
 				CatalogueWrites.Rate(request.Rate),
-				request.Switch),
+				request.Switch,
+				request.SwitchFrom),
 			true,
 			cancellationToken);
 	}

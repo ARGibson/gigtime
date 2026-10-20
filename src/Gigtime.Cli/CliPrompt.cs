@@ -45,6 +45,8 @@ internal static class CliPrompt
 			return null;
 		}
 
-		return command == "start" ? path : path + (path.Contains('?') ? "&" : "?") + "switch=true";
+		return command == "start"
+			? path
+			: path + (path.Contains('?') ? "&" : "?") + "switch=true&switch_from=" + Uri.EscapeDataString(running);
 	}
 }

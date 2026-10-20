@@ -55,7 +55,7 @@ public static class TaskDecider
 		if (c.Rate < 0) return Invalid(task, c, "Task rate cannot be negative.");
 
 		var at = TaskMath.Instant(c.At);
-		var switching = TaskSwitch.Decide(c.TaskId, tracker, openTasks, c.Command, at, c.Switch);
+		var switching = TaskSwitch.Decide(c.TaskId, tracker, openTasks, c.Command, at, c.Switch, c.SwitchFrom);
 
 		if (!switching.IsSuccess) return switching;
 
@@ -95,9 +95,12 @@ public static class TaskDecider
 		if (!tracker.TaskIds.Contains(task.Id)) return Transition(task, c);
 
 		var at = TaskMath.Instant(instant);
-		var last = task.Timeline[^1];
 
-		if (at < (last.End ?? last.Start)) return Invalid(task, c, "The instant precedes the last interval boundary.");
+		var boundary = task.State == TaskState.Running
+			? task.RunningStart()
+			: task.LatestEnd();
+
+		if (at < boundary) return Invalid(task, c, "The instant precedes the last interval boundary.");
 		if (!stop) return Decision.Accept(new TaskPaused(at), new TrackerAdvanced());
 
 		if (c is StopTask { Submit: true })
@@ -145,11 +148,12 @@ public static class TaskDecider
 		if (task.State == TaskState.Paused && !tracker.TaskIds.Contains(task.Id)) return Transition(task, c);
 
 		var at = TaskMath.Instant(c.At);
-		var boundary = task.StoppedAt ?? task.Timeline[^1].End;
+		var boundary = task.LatestEnd();
+		if (task.StoppedAt is { } stopped && (boundary is null || stopped > boundary)) boundary = stopped;
 
 		if (at < boundary) return Invalid(task, c, "Resume cannot precede the last interval endpoint or stop.");
 
-		var switching = TaskSwitch.Decide(task.Id, tracker, openTasks, c.Command, at, c.Switch);
+		var switching = TaskSwitch.Decide(task.Id, tracker, openTasks, c.Command, at, c.Switch, c.SwitchFrom);
 
 		if (!switching.IsSuccess) return switching;
 
@@ -165,16 +169,13 @@ public static class TaskDecider
 		var start = TaskMath.Instant(c.Start);
 		var end = TaskMath.Instant(c.End);
 
-		if (end < start) return Invalid(task, c, "An interval must end at or after its start.");
+		if (end <= start) return Invalid(task, c, "An added interval must end after its start.");
 
-		if (task.State == TaskState.Running && end > task.Timeline[^1].Start)
+		if (task.State == TaskState.Running && end > task.RunningStart())
 			return Invalid(task, c, "An added interval must end at or before the running interval starts.");
 
-		if (end > start && task.Timeline.Any(interval => interval.End != interval.Start
-					&& start < (interval.End ?? DateTimeOffset.MaxValue) && end > interval.Start))
-		{
+		if (!IntervalOrdering.IsValid(task.Timeline.Append(new(0, start, end))))
 			return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
-		}
 
 		return Decision.Accept(new IntervalAdded(task.Timeline.Max(interval => interval.Number) + 1, start, end), new TrackerAdvanced());
 	}
@@ -213,19 +214,8 @@ public static class TaskDecider
 			End = c.End is { } end ? TaskMath.Instant(end) : old.End,
 		};
 
-		intervals = intervals
-			.OrderBy(interval => interval.Start)
-			.ThenBy(interval => interval.End is null)
-			.ThenBy(interval => interval.Number)
-			.ToArray();
-
-		for (var i = 0; i < intervals.Length; i++)
-		{
-			var interval = intervals[i];
-
-			if (interval.End < interval.Start || (i > 0 && (intervals[i - 1].End is null || intervals[i - 1].End > interval.Start)))
-				return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
-		}
+		if (!IntervalOrdering.IsValid(intervals))
+			return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
 
 		return Decision.Accept(new IntervalAmended(c.Interval,
 			c.Start is { } s ? TaskMath.Instant(s) : null,
@@ -260,7 +250,7 @@ public static class TaskDecider
 			(TaskState.Running or TaskState.Paused, StartTask or RecordTask or VoidTask) => "gig stop",
 			(TaskState.Paused, PauseTask) => "gig resume",
 			(TaskState.Stopped or TaskState.Voided, StartTask or RecordTask) => null,
-			(TaskState.Stopped, PauseTask or ResumeTask or StopTask) => "gig start",
+			(TaskState.Stopped, PauseTask or StopTask) => "gig resume " + task.Id,
 			(TaskState.Voided, _) => "gig start",
 			_ => null,
 		};

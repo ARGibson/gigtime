@@ -13,7 +13,9 @@ public static class ResumeTaskEndpoint
 	{
 		return TaskWrites.LoadAsync(events,
 			context,
-			(_, _) => new ResumeTask(now, bool.TryParse(context.Request.Query["switch"], out var switchTask) && switchTask),
+			(_, _) => new ResumeTask(now,
+				bool.TryParse(context.Request.Query["switch"], out var switchTask) && switchTask,
+				context.Request.Query["switch_from"].FirstOrDefault()),
 			false,
 			cancellationToken);
 	}

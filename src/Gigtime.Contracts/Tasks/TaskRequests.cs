@@ -1,6 +1,12 @@
 namespace Gigtime.Contracts.Tasks;
 
-public sealed record StartTaskRequest(string Client, string Project, string? Ref = null, string? Rate = null, bool Switch = false);
+public sealed record StartTaskRequest(
+	string Client,
+	string Project,
+	string? Ref = null,
+	string? Rate = null,
+	bool Switch = false,
+	string? SwitchFrom = null);
 
 public sealed record VoidTaskRequest(string? Reason = null);
 

@@ -29,7 +29,7 @@ public sealed class TaskView
 	public long RawSecondsAt(DateTimeOffset now)
 	{
 		return RawSeconds + (State == TaskState.Running
-			? Math.Max(0, (TaskMath.Instant(now) - Timeline[^1].Start).Ticks / TimeSpan.TicksPerSecond)
+			? Math.Max(0, (TaskMath.Instant(now) - RunningStart()).Ticks / TimeSpan.TicksPerSecond)
 			: 0);
 	}
 
@@ -48,7 +48,8 @@ public sealed class TaskView
 
 	public void Apply(TaskPaused e)
 	{
-		Close(e.At);
+		// #36: stale inline projection can run before the expected-version check rejects a competing switch.
+		if (State == TaskState.Running) Close(e.At);
 		State = TaskState.Paused;
 		PausedAt = e.At;
 	}
@@ -72,7 +73,7 @@ public sealed class TaskView
 		Timeline.Add(new(e.Interval, e.Start, e.End));
 		OrderTimeline();
 		StartedAt = Timeline[0].Start;
-		if (State == TaskState.Stopped) StoppedAt = Timeline[^1].End;
+		if (State == TaskState.Stopped) StoppedAt = LatestEnd();
 	}
 
 	public void Apply(TaskStopped e)
@@ -129,7 +130,7 @@ public sealed class TaskView
 
 		OrderTimeline();
 		StartedAt = Timeline[0].Start;
-		if (State == TaskState.Stopped) StoppedAt = Timeline[^1].End;
+		if (State == TaskState.Stopped) StoppedAt = LatestEnd();
 	}
 
 	public void Apply(TaskReassigned e) => ProjectId = e.ProjectId;
@@ -200,6 +201,10 @@ public sealed class TaskView
 		}
 	}
 
+	internal DateTimeOffset? LatestEnd() => Timeline.Max(interval => interval.End);
+
+	internal DateTimeOffset RunningStart() => Timeline.Single(interval => interval.End is null).Start;
+
 	private int NextIntervalNumber() => Timeline.Count == 0 ? 1 : Timeline.Max(interval => interval.Number) + 1;
 
 	private void OrderTimeline() => Timeline.Sort((left, right) =>
@@ -215,7 +220,9 @@ public sealed class TaskView
 
 	private void Close(DateTimeOffset at)
 	{
-		Timeline[^1] = Timeline[^1] with
+		var index = Timeline.FindIndex(interval => interval.End is null);
+
+		Timeline[index] = Timeline[index] with
 		{
 			End = at,
 		};

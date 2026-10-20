@@ -7,7 +7,8 @@ internal static class TaskSwitch
 		IReadOnlyList<TaskView> openTasks,
 		string command,
 		DateTimeOffset at,
-		bool allowSwitch)
+		bool allowSwitch,
+		string? switchFrom)
 	{
 		var running = openTasks
 			.Where(task => tracker.TaskIds.Contains(task.Id) && task.State == TaskState.Running && task.Id != targetId)
@@ -26,6 +27,16 @@ internal static class TaskSwitch
 
 		var other = running[0];
 
+		if (switchFrom is not null && switchFrom != other.Id)
+		{
+			return Decision.Refuse("invalid_transition",
+				$"Task {other.Id} is now running; it differs from the confirmed switch task {switchFrom}.",
+				"running",
+				command,
+				"gig status",
+				other.Id);
+		}
+
 		if (!allowSwitch)
 		{
 			return Decision.Refuse("invalid_transition",
@@ -36,7 +47,7 @@ internal static class TaskSwitch
 				other.Id);
 		}
 
-		if (at < other.Timeline[^1].Start)
+		if (at < other.RunningStart())
 			return Decision.Refuse("validation", "Switch cannot precede the running interval's start.", "running", command, taskId: other.Id);
 
 		return Decision.Accept(new TaskEventFor(other.Id, new TaskPaused(at)));

@@ -278,10 +278,14 @@ Explicit ids on `pause`, `resume` and `stop` select the task named.
 With stdin and stdout both on terminals, a refused switch offers confirmation and an
 ambiguous target offers a numbered choice. Enter declines and changes nothing.
 Piped commands and `--json` never prompt; `--switch` authorises the switch directly.
-Each confirmed choice is sent as a fresh request, so concurrent changes can still refuse.
+Each confirmed choice is sent as a fresh request. A confirmed switch carries the
+running task id shown in the prompt; if another task has started running, the retry
+refuses instead of pausing it. If nothing runs, the confirmed switch proceeds.
+The API carries this optional guard as `switch_from` in a start request or a resume
+query parameter. Plain `--switch` requests carry no expected running id.
 
 `add` takes one positional task id to append an interval, or a client and project to
-create a stopped task. Existing-task additions take neither `--ref` nor `--rate`.
+create a stopped task. Existing-task additions take neither `--ref` nor `--rate`, and must end after they start.
 Intervals keep their numbers and appear in time order; touching ends are allowed,
 overlaps within a task are refused. Added time on a running task ends no later than
 its running interval starts. Submitted and voided tasks refuse additions.

@@ -2,12 +2,19 @@ namespace Gigtime.Domain.Tasks;
 
 public abstract record TaskCommand(string Command);
 
-public sealed record StartTask(string TaskId, Guid ProjectId, string? Ref, DateTimeOffset At, decimal? Rate = null, bool Switch = false)
+public sealed record StartTask(
+	string TaskId,
+	Guid ProjectId,
+	string? Ref,
+	DateTimeOffset At,
+	decimal? Rate = null,
+	bool Switch = false,
+	string? SwitchFrom = null)
 	: TaskCommand("start");
 
 public sealed record PauseTask(DateTimeOffset At) : TaskCommand("pause");
 
-public sealed record ResumeTask(DateTimeOffset At, bool Switch = false) : TaskCommand("resume");
+public sealed record ResumeTask(DateTimeOffset At, bool Switch = false, string? SwitchFrom = null) : TaskCommand("resume");
 
 public sealed record StopTask(DateTimeOffset At, bool Submit = false) : TaskCommand("stop");
 

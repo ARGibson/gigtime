@@ -95,36 +95,39 @@ public sealed class OpenTasksTests
 	[Fact]
 	public async Task Concurrent_switch_commands_never_leave_two_tasks_running()
 	{
-		await using var app = await ServiceHost.StartAsync();
-		await app.CreateProjectAsync();
-		var a = (await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project"))).Data!;
-		app.Clock.Now = app.Clock.Now.AddSeconds(1);
-		await app.PostAsync<TaskDto>("/v1/tasks/pause");
-		await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project"));
-		app.Clock.Now = app.Clock.Now.AddSeconds(1);
-		var host = app.Host;
+		for (var round = 0; round < 15; round++)
+		{
+			await using var app = await ServiceHost.StartAsync();
+			await app.CreateProjectAsync();
+			var a = (await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project"))).Data!;
+			app.Clock.Now = app.Clock.Now.AddSeconds(1);
+			await app.PostAsync<TaskDto>("/v1/tasks/pause");
+			await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project"));
+			app.Clock.Now = app.Clock.Now.AddSeconds(1);
+			var host = app.Host;
 
-		var responses = await Task.WhenAll(
-			host.Scenario(s =>
-			{
-				s.Post.Json(new StartTaskRequest("example", "project", Switch: true)).ToUrl("/v1/tasks/start");
-				s.IgnoreStatusCode();
-			}),
-			host.Scenario(s =>
-			{
-				s.Post.Url($"/v1/tasks/resume?task={a.Id}&switch=true");
-				s.IgnoreStatusCode();
-			}));
+			var responses = await Task.WhenAll(
+				host.Scenario(s =>
+				{
+					s.Post.Json(new StartTaskRequest("example", "project", Switch: true)).ToUrl("/v1/tasks/start");
+					s.IgnoreStatusCode();
+				}),
+				host.Scenario(s =>
+				{
+					s.Post.Url($"/v1/tasks/resume?task={a.Id}&switch=true");
+					s.IgnoreStatusCode();
+				}));
 
-		var envelopes = await Task.WhenAll(responses.Select(r => r.ReadAsJsonAsync<Envelope<TaskDto>>()));
-		envelopes.Count(e => e.Ok).ShouldBeGreaterThanOrEqualTo(1);
-		foreach (var error in envelopes.Where(e => !e.Ok)) error.Error!.Code.ShouldBeOneOf("conflict", "invalid_transition");
-		var tasks = (await app.GetAsync<TasksDto>("/v1/tasks?all=true")).Data!.Tasks;
-		tasks.Count(t => t.State == "running").ShouldBe(1);
-		var status = (await app.GetAsync<StatusDto>("/v1/status")).Data!;
-		status.Running!.Id.ShouldBe(tasks.Single(t => t.State == "running").Id);
-		status.Paused.Count.ShouldBe(tasks.Count(t => t.State == "paused"));
-		foreach (var task in tasks) await AssertReplayAsync(app, task.Id);
+			var envelopes = await Task.WhenAll(responses.Select(r => r.ReadAsJsonAsync<Envelope<TaskDto>>()));
+			envelopes.Count(e => e.Ok).ShouldBeGreaterThanOrEqualTo(1);
+			foreach (var error in envelopes.Where(e => !e.Ok)) error.Error!.Code.ShouldBeOneOf("conflict", "invalid_transition");
+			var tasks = (await app.GetAsync<TasksDto>("/v1/tasks?all=true")).Data!.Tasks;
+			tasks.Count(t => t.State == "running").ShouldBe(1);
+			var status = (await app.GetAsync<StatusDto>("/v1/status")).Data!;
+			status.Running!.Id.ShouldBe(tasks.Single(t => t.State == "running").Id);
+			status.Paused.Count.ShouldBe(tasks.Count(t => t.State == "paused"));
+			foreach (var task in tasks) await AssertReplayAsync(app, task.Id);
+		}
 	}
 
 	private static async Task AssertReplayAsync(ServiceHost app, string id)

@@ -81,6 +81,8 @@ public sealed class OpenTaskCliTests
 			using var second = JsonDocument.Parse(requests[1].Body);
 			first.RootElement.GetProperty("switch").GetBoolean().ShouldBeFalse();
 			second.RootElement.GetProperty("switch").GetBoolean().ShouldBeTrue();
+			second.RootElement.GetProperty("switch_from").GetString().ShouldBe("aaaaaa");
+			first.RootElement.GetProperty("switch_from").ValueKind.ShouldBe(JsonValueKind.Null);
 			second.RootElement.GetProperty("ref").GetString().ShouldBe("opaque");
 			second.RootElement.GetProperty("rate").GetString().ShouldBe("45");
 		}
@@ -190,7 +192,7 @@ public sealed class OpenTaskCliTests
 		(await app.RunAsync(["resume", "bbbbbb"], TestContext.Current.CancellationToken)).ShouldBe(3);
 		var requests = server.Requests.ToArray();
 		requests.Length.ShouldBe(2);
-		requests[1].Path.ShouldBe("/v1/tasks/resume?task=bbbbbb&switch=true");
+		requests[1].Path.ShouldBe("/v1/tasks/resume?task=bbbbbb&switch=true&switch_from=aaaaaa");
 		requests[1].Body.ShouldBeEmpty();
 		error.ToString().Split("[y/N]").Length.ShouldBe(2);
 	}
