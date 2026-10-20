@@ -3,6 +3,7 @@ using Gigtime.Contracts;
 using Gigtime.Contracts.Catalogue;
 using Gigtime.Contracts.Reporting;
 using Gigtime.Contracts.Tasks;
+using NodaTime;
 using Spectre.Console;
 
 namespace Gigtime.Cli;
@@ -39,6 +40,10 @@ internal sealed class HumanOutput
 
 		switch (data)
 		{
+			case TimesheetDto timesheet:
+				Timesheet(timesheet);
+
+				break;
 			case ReportDto report:
 				Report(report);
 
@@ -89,19 +94,48 @@ internal sealed class HumanOutput
 
 	private void Report(ReportDto report)
 	{
-		Table(["Client", "Project", "Currency", "Raw", "Rounded", "Estimated earnings"],
+		Table(["Client", "Project", "Currency", "Raw", "Rounded", "Amount"],
 			report.Totals.Select(t => new[]
 			{
 				t.Client.Key, t.Project.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
-				t.EstimatedEarnings?.Rounded ?? "not rated",
+				t.Amount?.Rounded ?? "not rated",
 			}));
 
-		Table(["Client total", "Currency", "Raw", "Rounded", "Estimated earnings"],
+		Table(["Client total", "Currency", "Raw", "Rounded", "Amount"],
 			report.Clients.Select(t => new[]
 			{
 				t.Client.Key, t.Currency, DurationText.Format(t.RawSeconds), DurationText.Format(t.RoundedSeconds),
-				t.EstimatedEarnings?.Rounded ?? "not rated",
+				t.Amount?.Rounded ?? "not rated",
 			}));
+
+		console.WriteLine("Unsubmitted (provisional)");
+
+		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded", "Provisional amount"],
+			report.Unsubmitted.Select(t => new[]
+			{
+				t.TaskId, t.Client.Key, t.Project.Key, t.Ref ?? "", t.State, DurationText.Format(t.RawSeconds),
+				DurationText.Format(t.RoundedSeconds), t.Amount is { } amount
+					? amount.Rounded + " " + amount.Currency
+					: t.Rate is not null
+						? "unpriced"
+						: "not rated",
+			}));
+	}
+
+	private void Timesheet(TimesheetDto timesheet)
+	{
+		foreach (var day in timesheet.Days)
+		{
+			console.WriteLine(day.Date + "  " + DurationText.Format(day.RawSeconds));
+
+			Table(["Id", "Client", "Project", "Ref", "Time"],
+				day.Tasks.Select(t => new[] { t.TaskId, t.Client.Key, t.Project.Key, t.Ref ?? "", DurationText.Format(t.RawSeconds), }));
+		}
+
+		Table(["Client", "Project", "Period time"],
+			timesheet.Projects.Select(t => new[] { t.Client.Key, t.Project.Key, DurationText.Format(t.RawSeconds), }));
+
+		Table(["Client total", "Period time"], timesheet.Clients.Select(t => new[] { t.Client.Key, DurationText.Format(t.RawSeconds), }));
 	}
 
 	private void Clients(IEnumerable<ClientDto> clients)
@@ -122,7 +156,7 @@ internal sealed class HumanOutput
 
 	private void Task(TaskDto task)
 	{
-		var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+		var zone = TimeZones.Get(task.Timezone);
 		console.WriteLine("Times in " + task.Timezone);
 
 		Table(["Id", "Client", "Project", "Ref", "State", "Raw", "Rounded"],
@@ -173,7 +207,7 @@ internal sealed class HumanOutput
 				console.WriteLine("Times in " + timezone);
 			}
 
-			var zone = TimeZoneInfo.FindSystemTimeZoneById(task.Timezone);
+			var zone = TimeZones.Get(task.Timezone);
 
 			rows.Add([
 				task.Id, task.Client.Key, task.Project.Key, task.Ref ?? "", task.State,
@@ -185,12 +219,12 @@ internal sealed class HumanOutput
 		Table(headings, rows);
 	}
 
-	private string Instant(DateTimeOffset? instant, TimeZoneInfo zone)
+	private string Instant(DateTimeOffset? instant, DateTimeZone zone)
 	{
 		if (instant is null) return "running";
 
-		var local = TimeZoneInfo.ConvertTime(instant.Value, zone);
-		var today = TimeZoneInfo.ConvertTime(now, zone).Date;
+		var local = NodaTime.Instant.FromDateTimeOffset(instant.Value).InZone(zone).LocalDateTime;
+		var today = NodaTime.Instant.FromDateTimeOffset(now).InZone(zone).Date;
 
 		return local.ToString(local.Date == today ? "HH:mm" : "yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 	}

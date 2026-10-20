@@ -22,7 +22,7 @@ public static partial class CatalogueRules
 	public static bool ValidKey(string? key) => key is not null && KeyPattern().IsMatch(key);
 	public static bool ValidCurrency(string? currency) => currency is not null && currencies.Contains(currency);
 	public static bool ValidRounding(string? rounding) => rounding is null or "nearest-minute";
-	public static bool ValidTimezone(string? timezone) => timezone is null || TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out _);
+	public static bool ValidTimezone(string? timezone) => timezone is null || TimeZones.Find(timezone) is not null;
 	public static bool ValidId(Guid id) => id.Version == 7;
 
 	[GeneratedRegex("^[a-z0-9][a-z0-9-]{0,31}\\z", RegexOptions.CultureInvariant)]

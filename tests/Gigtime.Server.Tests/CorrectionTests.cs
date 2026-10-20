@@ -24,7 +24,7 @@ public sealed class CorrectionTests
 		added.Submission.ShouldBeNull();
 		added.Rate.ShouldBeNull();
 		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Id.ShouldBe(open.Id);
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().RawSeconds.ShouldBe(91);
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Single(t => t.TaskId == added.Id).RawSeconds.ShouldBe(91);
 	}
 
 	[Fact]
@@ -47,7 +47,7 @@ public sealed class CorrectionTests
 		amended.RawSeconds.ShouldBe(211);
 		amended.RoundedSeconds.ShouldBe(240);
 		amended.Submission.ShouldBeNull();
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().EstimatedEarnings!.Rounded.ShouldBe("6.67");
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.ShouldHaveSingleItem().Amount!.Rounded.ShouldBe("6.67");
 		amended.Ref.ShouldBe("fixed");
 
 		var refused = await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/amend",
@@ -75,7 +75,7 @@ public sealed class CorrectionTests
 		var changed = (await app.PostAsync<TaskDto>($"/v1/tasks/{task.Id}/amend", new AmendTaskInput(Client: "ny", Project: "two"))).Data!;
 		changed.Project.Key.ShouldBe("two");
 		changed.Submission.ShouldBeNull();
-		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Totals.ShouldHaveSingleItem().EstimatedEarnings!.Rounded.ShouldBe("50.00");
+		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.ShouldHaveSingleItem().Amount!.Rounded.ShouldBe("50.00");
 
 		(await app.PostAsync<TaskDto>("/v1/tasks/add", new RecordTaskInput("ny", "one", "2026-03-08T02:15", "2026-03-08T04:00"), 422))
 			.Error!.Code.ShouldBe("validation");

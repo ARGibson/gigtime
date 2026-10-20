@@ -5,13 +5,18 @@
 		<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
 	</PropertyGroup>
 	<ItemGroup>
-		<ProjectReference Include="../Gigtime.Domain/Gigtime.Domain.csproj"/>
-		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj"/>
-		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj"/>
+		<ProjectReference Include="../Gigtime.Domain/Gigtime.Domain.csproj" />
+		<ProjectReference Include="../Gigtime.Contracts/Gigtime.Contracts.csproj" />
+		<ProjectReference Include="../Gigtime.Platform/Gigtime.Platform.csproj" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Fisher"/>
-		<PackageReference Include="WolverineFx.Fisher"/>
-		<PackageReference Include="WolverineFx.Http"/>
+		<PackageReference Include="Fisher" />
+		<PackageReference Include="NodaTime" />
+		<PackageReference Include="WolverineFx.Fisher" />
+		<PackageReference Include="WolverineFx.Http" />
+	</ItemGroup>
+	<ItemGroup>
+		<!-- #35: one TZDB id resolver shared without coupling domain and contracts. -->
+		<Compile Include="../Shared/TimeZones.cs" Link="TimeZones.cs" />
 	</ItemGroup>
 </Project>

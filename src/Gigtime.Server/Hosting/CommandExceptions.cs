@@ -16,19 +16,21 @@ public sealed partial class CommandExceptions(ILogger<CommandExceptions> log) : 
 		var code = exception switch
 		{
 			EventStreamUnexpectedMaxEventIdException or StreamLockedException => "conflict",
-			BadHttpRequestException or System.Text.Json.JsonException => "validation",
+			BadHttpRequestException or System.Text.Json.JsonException or TimeZoneNotFoundException => "validation",
 			SqliteException { SqliteErrorCode: Busy or Locked or CantOpen or IoError or Full } => "unavailable",
 			IOException or TimeoutException => "unavailable",
 			_ => "internal",
 		};
 
-		var message = code switch
-		{
-			"conflict" => "State changed while this command was running. Retry the command.",
-			"validation" => "The request body or parameters are invalid.",
-			"unavailable" => "The store is temporarily unavailable.",
-			_ => "The command failed unexpectedly.",
-		};
+		var message = exception is TimeZoneNotFoundException
+			? exception.Message
+			: code switch
+			{
+				"conflict" => "State changed while this command was running. Retry the command.",
+				"validation" => "The request body or parameters are invalid.",
+				"unavailable" => "The store is temporarily unavailable.",
+				_ => "The command failed unexpectedly.",
+			};
 
 		var command = httpContext.Items["command"] as string ?? "request";
 		if (code is "internal" or "unavailable") Failed(log, exception, command, code);

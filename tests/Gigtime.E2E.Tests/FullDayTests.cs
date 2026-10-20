@@ -57,20 +57,28 @@ public sealed class FullDayTests(PublishedFixture published)
 			.Select(t => t.GetProperty("id").GetString())
 			.ShouldContain(id);
 
-		var date = amended.GetProperty("stopped_at").GetDateTimeOffset().UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+		var submitted = await day.SuccessAsync("submit", id);
+
+		var date = submitted
+			.GetProperty("submission")
+			.GetProperty("submitted_at")
+			.GetDateTimeOffset()
+			.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
 		var report = await day.SuccessAsync("report", "--range", date + ".." + date, "--client", "acme", "--project", "work");
 		report.GetProperty("totals")[0].GetProperty("raw_seconds").GetInt64().ShouldBe(3600);
 
 		foreach (var total in new[] { report.GetProperty("totals")[0], report.GetProperty("clients")[0] })
 		{
 			total.GetProperty("rounded_seconds").GetInt64().ShouldBe(3600);
-			total.GetProperty("estimated_earnings").GetProperty("rounded").GetString().ShouldBe("20.00");
+			total.GetProperty("amount").GetProperty("rounded").GetString().ShouldBe("20.00");
 		}
 
 		var human = await day.GigAsync("report", "--range", date + ".." + date);
 		human.ExitCode.ShouldBe(0);
 		human.Output.ShouldContain("GBP");
 		human.Output.ShouldNotContain("\u001b");
+		await day.SuccessAsync("unsubmit", id);
 		await day.SuccessAsync("void", id, "--reason", "duplicate");
 		(await day.SuccessAsync("report", "--range", date + ".." + date)).GetProperty("totals").GetArrayLength().ShouldBe(0);
 		(await day.SuccessAsync("log")).GetProperty("tasks").GetArrayLength().ShouldBe(0);

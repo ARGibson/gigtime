@@ -2,15 +2,15 @@
 
 Time tracking for people who bill by the hour, without leaving the terminal.
 
-Type `gig start acme web` when you sit down, `gig stop` when you're done, and gigtime keeps every minute against the right client and project. At the end of the week, `gig report` tells you what to invoice.
+Type `gig start acme web` when you sit down, `gig stop` when you're done, and gigtime keeps every minute against the right client and project. `gig timesheet` shows when you worked; `gig report` totals the figures you submitted.
 
 ```console
 $ gig start acme web --ref sprint-12
 $ gig pause        # lunch
 $ gig resume
-$ gig stop
+$ gig stop --submit
 $ gig report --week
-  Client   Project   Currency   Raw        Rounded    Estimated earnings
+  Client   Project   Currency   Raw        Rounded    Amount
   acme     web       GBP        03:40:00   03:40:00   146.67
 ```
 
@@ -193,7 +193,8 @@ gig project add acme work --name Work --rate 40
 gig start acme work --ref opaque-42
 gig pause
 gig resume
-gig stop
+gig timesheet --week
+gig stop --submit
 gig report --week
 gig log
 ```
@@ -208,8 +209,10 @@ voided tasks.
 
 Times accept ISO 8601 instants or local date-times, and `HH:mm` for today in the client's
 zone. An explicit offset is unambiguous; local times in a daylight-saving gap or overlap
-are refused. Intervals cannot overlap or run backwards. Reports use the stop's local
-date, including the entire task even when it started in an earlier period.
+are refused. Intervals cannot overlap or run backwards. Timesheets split intervals at
+local midnight, including daylight-saving changes, and show raw time on each day it
+happened. Settlement reports count submitted tasks in the period containing their
+submission instant, in the client's timezone.
 
 ## Commands
 
@@ -243,6 +246,7 @@ prints plain candidates. Options requiring values reject an omitted value.
 | `gig add` | `gig add acme work --from 2026-03-02T09:00:00Z --to 2026-03-02T10:00:00Z --ref opaque-42 --rate 45` |
 | `gig amend` | `gig amend abcdef --interval 1 --start 09:00 --end 10:15` |
 | `gig void` | `gig void abcdef --reason duplicate` |
+| `gig timesheet` | `gig timesheet --range 2026-03-01..2026-03-31 --client acme --project work` |
 | `gig report` | `gig report --range 2026-03-01..2026-03-31 --client acme --project work` |
 | `gig export` | `gig export --from 2026-03-01 --to 2026-03-31 > events.jsonl` |
 
@@ -250,7 +254,7 @@ Client `set` also accepts `--timezone` and `--rounding`; project `set` accepts `
 and `--rounding`. A value flag and its `--clear-*` counterpart cannot be combined.
 `amend` also accepts `--client acme --project work` together, `--ref opaque-43` or
 `--clear-ref`, and `--rate 45` or `--clear-rate`. Time corrections require `--interval` and at least one time flag.
-`report` selects one of `--week` (default), `--month`, or inclusive local dates with
+`timesheet` and `report` select one of `--week` (default), `--month`, or inclusive local dates with
 `--range`. Export date-only bounds include the entire UTC date. Task ids are six
 lowercase hexadecimal characters.
 Completion offers stopped tasks for `submit` and submitted tasks for `unsubmit`.
@@ -262,10 +266,24 @@ own rate is replaced or cleared. Unsubmitted figures use the current task or pro
 rate and catalogue rounding; submission fixes them until the task is unsubmitted.
 
 The supported time-rounding policy is `nearest-minute` (half a minute rounds up).
-Settings inherit from defaults to client to project. Report amounts stay separate per
+Settings inherit from defaults to client to project. Settlement amounts stay separate per
 currency. Earnings are unrounded decimal amounts per task, summed and then rounded once
 per project total and client/currency total, away from zero at the currency's minor unit.
 Most currencies use two decimal places; exceptions include zero for JPY and three for BHD.
+
+`timesheet` counts every task except voided ones, including running intervals up to now.
+It shows one heading per local day, task lines beneath it, and period totals per project
+and client. It contains raw time only, with no rounding or money.
+
+`report` settles submitted tasks using their fixed rounded totals and amounts. Its
+Unsubmitted section lists every running, paused or stopped task with provisional figures,
+including tasks outside the selected period. Client and project filters apply to both
+sections. Each unsubmitted row's nullable `rate` is the task's own rate, in the same
+money shape as a task's `rate`. A stale-currency own rate leaves `amount` null and
+renders as `unpriced`. `not rated` means neither the task nor its project has a rate.
+Unsubmitting removes a task from settled totals; resubmitting places it in the new
+submission's period. Migrated tasks keep their old stop instant as their submission
+instant, preserving historical settlement totals.
 
 Human task times use the effective client timezone, printed once as `Times in
 America/New_York` (or the selected IANA zone). Instants on today in that zone use
@@ -310,9 +328,15 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Submission (nullable until submitted) | `submitted_at`, `rounded_seconds`, `rounding`, `rate` (nullable), `currency`, `amount` (nullable Earnings) |
 | Status | `task` (null when no task is open), `instance` (null for default) |
 | Log | `tasks` array |
-| Report | `totals`, `clients` arrays |
-| Project report total | `client`, `project`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `estimated_earnings` |
-| Client/currency report total | `client`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `estimated_earnings` |
+| Report | `totals`, `clients`, `unsubmitted` arrays |
+| Unsubmitted task | `task_id`, `client`, `project`, `ref`, `state`, `raw_seconds`, `rounded_seconds`, `display`, `amount` (nullable, provisional), `rate` (own rate, nullable) |
+| Timesheet | `days`, `projects`, `clients` arrays |
+| Timesheet day | `date`, `raw_seconds`, `display`, `tasks` array |
+| Timesheet task | `task_id`, `client`, `project`, `ref`, `raw_seconds`, `display` |
+| Timesheet project total | `client`, `project`, `raw_seconds`, `display` |
+| Timesheet client total | `client`, `raw_seconds`, `display` |
+| Project report total | `client`, `project`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `amount` |
+| Client/currency report total | `client`, `currency`, `raw_seconds`, `rounded_seconds`, `display`, `amount` |
 | Earnings (nullable when a rate is absent) | `currency`, `unrounded`, `rounded` |
 | Setup/check | `service_unit`, `service_installed`, `socket_unit`, `socket_installed`, `socket_path`, `socket_exists`, `database_path`, `healthy`, `changed`, `socket_activation`, `instance` (null for default) |
 | Health (`/v1/health`, inspected by setup) | `status` |

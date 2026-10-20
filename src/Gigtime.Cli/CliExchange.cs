@@ -164,6 +164,10 @@ internal sealed class CliExchange(
 				asJson && !exportStarted,
 				exportStarted ? null : "Run gig setup.");
 		}
+		catch (TimeZoneNotFoundException exception)
+		{
+			return Fail(command, ErrorCodes.Validation, exception.Message, asJson && !exportStarted);
+		}
 		catch (JsonException)
 		{
 			return Fail(command, ErrorCodes.Internal, "The service returned invalid JSON.", asJson && !exportStarted);

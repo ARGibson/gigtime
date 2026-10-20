@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using NodaTime;
 
 namespace Gigtime.Contracts;
 
@@ -18,22 +19,24 @@ public static partial class InputTime
 
 		if (Offset().IsMatch(text)) return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out instant);
 
-		var zone = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+		var zone = TimeZones.Get(timezone);
 		DateTime local;
 
 		if (TimeOnly.TryParseExact(text, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
 		{
-			var date = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, zone).DateTime);
-			local = date.ToDateTime(time);
+			var date = Instant.FromDateTimeOffset(now).InZone(zone).Date;
+			local = date.At(new LocalTime(time.Hour, time.Minute)).ToDateTimeUnspecified();
 		}
 		else if (!Local(text, out local))
 		{
 			return false;
 		}
 
-		if (zone.IsInvalidTime(local) || zone.IsAmbiguousTime(local)) return false;
+		var mapping = zone.MapLocal(LocalDateTime.FromDateTime(local));
 
-		instant = new(TimeZoneInfo.ConvertTimeToUtc(local, zone));
+		if (mapping.Count != 1) return false;
+
+		instant = mapping.Single().ToInstant().ToDateTimeOffset();
 
 		return true;
 	}

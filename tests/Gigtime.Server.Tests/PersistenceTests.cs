@@ -108,7 +108,8 @@ public sealed class PersistenceTests
 
 		var envelopes = await Task.WhenAll(responses.Select(r => r.ReadAsJsonAsync<Envelope<TaskDto>>()));
 		envelopes.Count(e => e.Ok).ShouldBe(1);
-		envelopes.Single(e => !e.Ok).Error!.Code.ShouldBe("conflict");
+		// #35: scheduling may let the loser read the committed tracker instead of racing its append.
+		envelopes.Single(e => !e.Ok).Error!.Code.ShouldBeOneOf("conflict", "invalid_transition");
 		(await app.GetAsync<TasksDto>("/v1/tasks")).Data!.Tasks.ShouldHaveSingleItem();
 	}
 }

@@ -11,7 +11,7 @@ public sealed record ReportTotalDto(
 	long RawSeconds,
 	long RoundedSeconds,
 	string Display,
-	EarningsDto? EstimatedEarnings);
+	EarningsDto? Amount);
 
 public sealed record ClientReportTotalDto(
 	EntityDto Client,
@@ -19,6 +19,21 @@ public sealed record ClientReportTotalDto(
 	long RawSeconds,
 	long RoundedSeconds,
 	string Display,
-	EarningsDto? EstimatedEarnings);
+	EarningsDto? Amount);
 
-public sealed record ReportDto(IReadOnlyList<ReportTotalDto> Totals, IReadOnlyList<ClientReportTotalDto> Clients);
+public sealed record UnsubmittedTaskDto(
+	string TaskId,
+	EntityDto Client,
+	EntityDto Project,
+	string? Ref,
+	string State,
+	long RawSeconds,
+	long RoundedSeconds,
+	string Display,
+	EarningsDto? Amount,
+	MoneyDto? Rate);
+
+public sealed record ReportDto(
+	IReadOnlyList<ReportTotalDto> Totals,
+	IReadOnlyList<ClientReportTotalDto> Clients,
+	IReadOnlyList<UnsubmittedTaskDto> Unsubmitted);

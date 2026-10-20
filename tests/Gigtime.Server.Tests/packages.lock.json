@@ -756,12 +756,16 @@
         }
       },
       "gigtime.contracts": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "NodaTime": "[3.3.5, )"
+        }
       },
       "gigtime.domain": {
         "type": "Project",
         "dependencies": {
-          "JasperFx.Events": "[2.90.1, )"
+          "JasperFx.Events": "[2.90.1, )",
+          "NodaTime": "[3.3.5, )"
         }
       },
       "gigtime.platform": {
@@ -774,6 +778,7 @@
           "Gigtime.Contracts": "[1.0.0, )",
           "Gigtime.Domain": "[1.0.0, )",
           "Gigtime.Platform": "[1.0.0, )",
+          "NodaTime": "[3.3.5, )",
           "WolverineFx.Fisher": "[6.51.0, )",
           "WolverineFx.Http": "[6.51.0, )"
         }
@@ -803,6 +808,12 @@
         "dependencies": {
           "JasperFx": "2.90.1"
         }
+      },
+      "NodaTime": {
+        "type": "CentralTransitive",
+        "requested": "[3.3.5, )",
+        "resolved": "3.3.5",
+        "contentHash": "0qtGKHOYhQGCeUItP4RN8KJktsKD9j/B4IqmoecUL+ymReq69O71qEpZY6x0aQPZa5KDLXY41aEOOHZ9T6Uqgw=="
       },
       "Spectre.Console": {
         "type": "CentralTransitive",

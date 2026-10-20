@@ -7,4 +7,11 @@
 		<!-- Contracts must remain usable by the Native AOT client. -->
 		<IsAotCompatible>true</IsAotCompatible>
 	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="NodaTime" />
+	</ItemGroup>
+	<ItemGroup>
+		<!-- #35: one TZDB id resolver shared without coupling domain and contracts. -->
+		<Compile Include="../Shared/TimeZones.cs" Link="TimeZones.cs" />
+	</ItemGroup>
 </Project>

@@ -13,7 +13,7 @@ public sealed class ServiceHost : IAsyncDisposable
 	public IAlbaHost Host { get; private set; } = null!;
 	public TestClock Clock { get; } = new();
 
-	public static async Task<ServiceHost> StartAsync(string? directory = null)
+	public static async Task<ServiceHost> StartAsync(string? directory = null, TimeZoneInfo? hostTimezone = null)
 	{
 		var fixture = directory is null
 			? new ServiceHost()
@@ -22,6 +22,7 @@ public sealed class ServiceHost : IAsyncDisposable
 				DirectoryPath = directory
 			};
 
+		if (hostTimezone is not null) fixture.Clock.HostTimezone = hostTimezone;
 		await fixture.StartHostAsync();
 
 		return fixture;
