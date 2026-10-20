@@ -26,10 +26,10 @@ public sealed class ExportTests
 		var response = await app.Host.Scenario(s => s.Get.Url("/v1/export"));
 		var text = await response.ReadAsTextAsync();
 		var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-		// Bootstrap, migration marker, client + project, backfills and a void cross both 100-event page edges.
-		lines.Length.ShouldBe(202);
+		// Bootstrap, migration marker, client + project, backfills, a void and tracker markers cross 100-event page edges.
+		lines.Length.ShouldBe(399);
 		var exported = lines.Select(line => JsonSerializer.Deserialize(line, GigtimeJsonContext.Default.ExportEventDto)!).ToArray();
-		exported.Select(e => e.Sequence).ShouldBe(Enumerable.Range(1, 202).Select(n => (long)n));
+		exported.Select(e => e.Sequence).ShouldBe(Enumerable.Range(1, 399).Select(n => (long)n));
 		exported.Select(e => e.Sequence).Distinct().Count().ShouldBe(exported.Length);
 		exported.Any(e => e.Stream == id && e.Data.TryGetProperty("reason", out var reason) && reason.GetString() == "mistake").ShouldBeTrue();
 

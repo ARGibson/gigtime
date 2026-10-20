@@ -80,7 +80,7 @@ public sealed class UnitActivationTests(PublishedFixture published)
 			first.Error.ShouldBeEmpty();
 			using var response = JsonDocument.Parse(first.Output);
 			response.RootElement.GetProperty("ok").GetBoolean().ShouldBeTrue();
-			response.RootElement.GetProperty("data").GetProperty("task").ValueKind.ShouldBe(JsonValueKind.Null);
+			response.RootElement.GetProperty("data").GetProperty("running").ValueKind.ShouldBe(JsonValueKind.Null);
 			File.Exists(database).ShouldBeTrue();
 		}
 		finally

@@ -180,7 +180,7 @@ internal static class CommandCases
 			"client archive" or "project archive" => JsonSerializer.Serialize(Envelopes.Success(name, new AcknowledgementDto("archived-id")),
 				GigtimeJsonContext.Default.AcknowledgementResponse),
 			"log" => JsonSerializer.Serialize(Envelopes.Success(name, new TasksDto([Task])), GigtimeJsonContext.Default.TasksResponse),
-			"status" => JsonSerializer.Serialize(Envelopes.Success(name, new StatusDto(Task)), GigtimeJsonContext.Default.StatusResponse),
+			"status" => JsonSerializer.Serialize(Envelopes.Success(name, new StatusDto(Task, [])), GigtimeJsonContext.Default.StatusResponse),
 			_ => JsonSerializer.Serialize(Envelopes.Success(name, Task), GigtimeJsonContext.Default.TaskResponse),
 		};
 	}

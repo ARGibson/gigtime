@@ -17,14 +17,14 @@ public sealed class FullDayTests(PublishedFixture published)
 		(await day.SuccessAsync("defaults", "show")).GetProperty("timezone").GetString().ShouldBe("UTC");
 		var task = await day.SuccessAsync("start", "acme", "work", "--ref", "opaque-42", "--rate", "20");
 		var id = task.GetProperty("id").GetString()!;
-		(await day.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString().ShouldBe(id);
+		(await day.SuccessAsync("status")).GetProperty("running").GetProperty("id").GetString().ShouldBe(id);
 		(await day.SuccessAsync("pause")).GetProperty("state").GetString().ShouldBe("paused");
 		var resumed = await day.SuccessAsync("resume");
 		resumed.GetProperty("state").GetString().ShouldBe("running");
 		resumed.GetProperty("intervals").EnumerateArray().Last().GetProperty("number").GetInt32().ShouldBe(2);
 		var stopped = await day.SuccessAsync("stop");
 		stopped.GetProperty("state").GetString().ShouldBe("stopped");
-		(await day.SuccessAsync("status")).GetProperty("task").ValueKind.ShouldBe(JsonValueKind.Null);
+		(await day.SuccessAsync("status")).GetProperty("running").ValueKind.ShouldBe(JsonValueKind.Null);
 		await day.SuccessAsync("project", "set", "acme", "work", "--rate", "99");
 
 		await day.SuccessAsync("amend",
@@ -124,7 +124,7 @@ public sealed class FullDayTests(PublishedFixture published)
 		var start = await day.HumanAsync("start", "acme", "work");
 		start.Output.ShouldContain("running");
 		start.Output.ShouldContain("acme");
-		var id = (await day.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString()!;
+		var id = (await day.SuccessAsync("status")).GetProperty("running").GetProperty("id").GetString()!;
 		var status = await day.HumanAsync("status");
 		status.Output.ShouldContain(id);
 		status.Output.ShouldContain("running");

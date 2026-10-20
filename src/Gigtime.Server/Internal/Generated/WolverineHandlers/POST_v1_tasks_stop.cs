@@ -46,7 +46,7 @@ namespace Internal.Generated.WolverineHandlers
 
             
             // The actual HTTP request handler execution
-            (var envelopeOfTaskDto_response, var appendEvents, var appendEvents2) = Gigtime.Server.Tasks.StopTaskEndpoint.Handle(loadedTaskCommand, dateTimeOffset);
+            (var envelopeOfTaskDto_response, var appendEvents, var appendEvents2, var appendEvents3) = Gigtime.Server.Tasks.StopTaskEndpoint.Handle(loadedTaskCommand, dateTimeOffset);
 
             if (appendEvents != null)
             {
@@ -60,6 +60,13 @@ namespace Internal.Generated.WolverineHandlers
                 
                 // Append events through the registered event store
                 appendEvents2.Execute(eventOperations);
+            }
+
+            if (appendEvents3 != null)
+            {
+                
+                // Append events through the registered event store
+                appendEvents3.Execute(eventOperations);
             }
 
             

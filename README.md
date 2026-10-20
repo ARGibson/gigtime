@@ -199,11 +199,15 @@ gig report --week
 gig log
 ```
 
-There can be one open task. Pause closes its current interval; resume opens another.
+Several tasks can stay open, with one running and the rest paused. Pause closes the
+running interval; resume opens another or reopens a stopped task on its original history.
+`start --switch` and `resume <task> --switch` pause the running task and run the target
+as one change. Submitted tasks first require `unsubmit`; voided tasks cannot reopen.
 Stop closes the task and leaves its figures provisional. `gig submit <task>` fixes the
 rounded total, rate and currency at submission; `gig stop --submit` does both together.
 Submitted tasks refuse corrections and voiding until `gig unsubmit <task>` returns them
-to stopped. `add` backfills a stopped task without changing the open task. `void` preserves
+to stopped. `add <client> <project>` backfills a new stopped task; `add <task>` adds time
+to an existing open or stopped task. `void` preserves
 history while excluding a task from reports and the default log. `log --all` includes
 voided tasks.
 
@@ -234,16 +238,16 @@ prints plain candidates. Options requiring values reject an omitted value.
 | `gig project set` | `gig project set acme work --key build --name Build --clear-rate --clear-rounding` |
 | `gig project list` | `gig project list acme --all` (omit the client to list all clients) |
 | `gig project archive` | `gig project archive acme build` |
-| `gig start` | `gig start acme work --ref opaque-42 --rate 45` |
-| `gig pause` | `gig pause` |
-| `gig resume` | `gig resume` |
-| `gig stop` | `gig stop --submit` |
+| `gig start` | `gig start acme work --ref opaque-42 --rate 45 --switch` |
+| `gig pause` | `gig pause` or `gig pause abcdef` |
+| `gig resume` | `gig resume` or `gig resume abcdef --switch` |
+| `gig stop` | `gig stop abcdef --submit` |
 | `gig submit` | `gig submit abcdef` |
 | `gig unsubmit` | `gig unsubmit abcdef` |
 | `gig status` | `gig status --json` |
 | `gig log` | `gig log --last 20 --client acme --project work --all` |
 | `gig show` | `gig show abcdef` |
-| `gig add` | `gig add acme work --from 2026-03-02T09:00:00Z --to 2026-03-02T10:00:00Z --ref opaque-42 --rate 45` |
+| `gig add` | `gig add acme work --from 2026-03-02T09:00:00Z --to 2026-03-02T10:00:00Z --ref opaque-42 --rate 45` or `gig add abcdef --from 09:00 --to 10:00` |
 | `gig amend` | `gig amend abcdef --interval 1 --start 09:00 --end 10:15` |
 | `gig void` | `gig void abcdef --reason duplicate` |
 | `gig timesheet` | `gig timesheet --range 2026-03-01..2026-03-31 --client acme --project work` |
@@ -264,6 +268,27 @@ Moving it to a client with another currency requires `--rate` or `--clear-rate` 
 same amendment. If that client's currency changes later, submission refuses until the
 own rate is replaced or cleared. Unsubmitted figures use the current task or project
 rate and catalogue rounding; submission fixes them until the task is unsubmitted.
+
+Bare `pause` targets the running task. Bare `stop` targets the running task, or the
+paused tasks when none runs; bare `resume` targets paused tasks when none runs.
+A single eligible task acts. Multiple choices or no eligible task refuse with
+`invalid_transition` (exit 3); ambiguous choices appear in `error.state.tasks`.
+Explicit ids on `pause`, `resume` and `stop` select the task named.
+
+With stdin and stdout both on terminals, a refused switch offers confirmation and an
+ambiguous target offers a numbered choice. Enter declines and changes nothing.
+Piped commands and `--json` never prompt; `--switch` authorises the switch directly.
+Each confirmed choice is sent as a fresh request, so concurrent changes can still refuse.
+
+`add` takes one positional task id to append an interval, or a client and project to
+create a stopped task. Existing-task additions take neither `--ref` nor `--rate`.
+Intervals keep their numbers and appear in time order; touching ends are allowed,
+overlaps within a task are refused. Added time on a running task ends no later than
+its running interval starts. Submitted and voided tasks refuse additions.
+
+A non-empty ref repeating an open task's ref in the same project adds a `repeated_ref`
+warning without blocking creation. Human warnings go to stderr; JSON includes them
+in the success envelope's optional `warnings` list.
 
 The supported time-rounding policy is `nearest-minute` (half a minute rounds up).
 Settings inherit from defaults to client to project. Settlement amounts stay separate per
@@ -306,15 +331,18 @@ Service responses are envelopes. Success has `ok` set to true, `command` and `da
 `error`. Failure has `ok` set to false, `command` and `error`, and omits `data`. Service envelopes
 are printed verbatim, with a final newline added when missing. Error members are `code`,
 `message`, `state` and `hint`; the last two can be null. Error state has nullable `task_id`,
-`state` and `command`. `command` names the operation. Instants use UTC ISO 8601 strings,
+`state`, `command` and `tasks`. The latter lists eligible ids for an ambiguous target.
+`command` names the operation. Instants use UTC ISO 8601 strings,
 durations use integer seconds, and money uses decimal strings. Nullable members are
-explicit null unless the envelope's success/failure omission rule applies.
+explicit null unless an envelope omission rule applies. Successful `warnings` are
+omitted when empty and contain `code` and `message` when present.
 
 | Data shape | JSON keys |
 |---|---|
-| Envelope | `ok`, `command`, `data`, `error` |
+| Envelope | `ok`, `command`, `data`, `error`, `warnings` (omitted when empty) |
+| Warning | `code`, `message` |
 | Error | `code`, `message`, `state`, `hint` |
-| Error state | `task_id`, `state`, `command` |
+| Error state | `task_id`, `state`, `command`, `tasks` (nullable list of eligible task ids) |
 | Defaults (`defaults show/set`) | `timezone`, `week_starts`, `rounding` |
 | Client (`client add/set`, entries of `client list`) | `id`, `key`, `name`, `currency`, `timezone`, `rounding`, `archived` |
 | Client list | `clients` array |
@@ -326,7 +354,7 @@ explicit null unless the envelope's success/failure omission rule applies.
 | Task (start/pause/resume/stop/submit/unsubmit/show/add/amend/void, log entries) | `id`, `client`, `project`, `ref`, `state`, `intervals`, `raw_seconds`, `rounded_seconds`, `display`, `submission`, `started_at`, `stopped_at`, `timezone`, `rate` (own rate, nullable) |
 | Interval | `number`, `start`, `end` (nullable while running) |
 | Submission (nullable until submitted) | `submitted_at`, `rounded_seconds`, `rounding`, `rate` (nullable), `currency`, `amount` (nullable Earnings) |
-| Status | `task` (null when no task is open), `instance` (null for default) |
+| Status | `running` (nullable task), `paused` (tasks, most recently paused first), `instance` (null for default) |
 | Log | `tasks` array |
 | Report | `totals`, `clients`, `unsubmitted` arrays |
 | Unsubmitted task | `task_id`, `client`, `project`, `ref`, `state`, `raw_seconds`, `rounded_seconds`, `display`, `amount` (nullable, provisional), `rate` (own rate, nullable) |
@@ -368,7 +396,10 @@ omitted/cleared distinction. Current event shapes are:
 | ProjectChanged | `project_id`, `key`, `name`, `rate`, `rounding` (change objects) |
 | ProjectArchived | `project_id` |
 | TaskStarted | `task_id`, `project_id`, `ref`, `at` |
-| TaskPaused / TaskResumed | `at` |
+| TaskPaused / TaskResumed / TaskReopened | `at` |
+| IntervalAdded | `interval`, `start`, `end` |
+| TaskOpened / TaskClosed | `task_id` |
+| TrackerAdvanced | empty object |
 | TaskStopped | `at`, `rounding`, `rate`, `currency` |
 | TaskRecorded | `task_id`, `project_id`, `ref`, `start`, `end`, `rounding`, `rate`, `currency` |
 | TaskSubmitted | `at`, `rounded_seconds`, `rounding`, `rate`, `currency` |
@@ -398,7 +429,7 @@ The `MigrationApplied` marker records completion, including for an empty store.
 | 4 | not_found | Resource or open task not found |
 | 5 | config | Local setup/configuration fault |
 | 6 | unavailable | Service or connection unavailable |
-| 7 | conflict | Optimistic concurrency conflict or ambiguous task prefix |
+| 7 | conflict | Optimistic concurrency conflict |
 | 8 | validation | Domain input refused |
 
 ## zsh completion

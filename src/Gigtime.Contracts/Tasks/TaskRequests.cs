@@ -1,6 +1,6 @@
 namespace Gigtime.Contracts.Tasks;
 
-public sealed record StartTaskRequest(string Client, string Project, string? Ref = null, string? Rate = null);
+public sealed record StartTaskRequest(string Client, string Project, string? Ref = null, string? Rate = null, bool Switch = false);
 
 public sealed record VoidTaskRequest(string? Reason = null);
 
@@ -17,3 +17,5 @@ public sealed record AmendTaskInput(
 	bool ClearRef = false,
 	string? Rate = null,
 	bool ClearRate = false);
+
+public sealed record AddIntervalInput(string Start, string End, string? Ref = null, string? Rate = null);

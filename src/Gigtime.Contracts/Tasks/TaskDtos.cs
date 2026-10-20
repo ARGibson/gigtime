@@ -31,4 +31,4 @@ public sealed record TaskDto(
 
 public sealed record TasksDto(IReadOnlyList<TaskDto> Tasks);
 
-public sealed record StatusDto(TaskDto? Task, string? Instance = null);
+public sealed record StatusDto(TaskDto? Running, IReadOnlyList<TaskDto> Paused, string? Instance = null);

@@ -23,15 +23,17 @@ public static class StopTaskEndpoint
 		if (context.Request.Query.TryGetValue("submit", out var value) && !bool.TryParse(value, out _))
 			return new("stop", new("validation", "submit must be true or false."));
 
-		return EnvelopeResult.From(loaded.Decision, loaded.Tracker.TaskId);
+		return EnvelopeResult.From(loaded.Decision, loaded.Task.Id);
 	}
 
 	[WolverinePost("/v1/tasks/stop")]
-	public static (Envelope<TaskDto>, AppendEvents, AppendEvents) Handle([NotBody] LoadedTaskCommand loaded, DateTimeOffset now)
+	public static (Envelope<TaskDto>, AppendEvents, AppendEvents?, AppendEvents) Handle([NotBody] LoadedTaskCommand loaded,
+		DateTimeOffset now)
 	{
 		var task = TaskWrites.After(loaded);
 
-		return (Envelopes.Success("stop", TaskResponses.From(task, loaded.Catalogue, now)),
-			Storage.AppendEvents(task.Id, loaded.TaskVersion, TaskWrites.TaskEvents(loaded)), TaskWrites.TrackerEvents(loaded));
+		return (TaskWrites.Response(loaded, now),
+			Storage.AppendEvents(task.Id, loaded.TaskVersion, TaskWrites.TaskEvents(loaded)), TaskWrites.OtherEvents(loaded),
+			TaskWrites.TrackerEvents(loaded));
 	}
 }

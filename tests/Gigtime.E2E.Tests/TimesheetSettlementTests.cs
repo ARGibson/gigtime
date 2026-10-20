@@ -61,7 +61,7 @@ public sealed class TimesheetSettlementTests(PublishedFixture published)
 
 		do
 		{
-			seconds = (await day.SuccessAsync("status")).GetProperty("task").GetProperty("raw_seconds").GetInt64();
+			seconds = (await day.SuccessAsync("status")).GetProperty("running").GetProperty("raw_seconds").GetInt64();
 			if (seconds < 1) await Task.Delay(25, TestContext.Current.CancellationToken);
 		} while (seconds < 1 && elapsed.Elapsed < TimeSpan.FromSeconds(3));
 

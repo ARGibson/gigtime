@@ -14,14 +14,16 @@ public static class PauseTaskEndpoint
 		return TaskWrites.LoadAsync(events, context, (_, _) => new PauseTask(now), false, cancellationToken);
 	}
 
-	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded) => EnvelopeResult.From(loaded.Decision, loaded.Tracker.TaskId);
+	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded) => EnvelopeResult.From(loaded.Decision, loaded.Task.Id);
 
 	[WolverinePost("/v1/tasks/pause")]
-	public static (Envelope<TaskDto>, AppendEvents, AppendEvents) Handle([NotBody] LoadedTaskCommand loaded, DateTimeOffset now)
+	public static (Envelope<TaskDto>, AppendEvents, AppendEvents?, AppendEvents) Handle([NotBody] LoadedTaskCommand loaded,
+		DateTimeOffset now)
 	{
 		var task = TaskWrites.After(loaded);
 
-		return (Envelopes.Success("pause", TaskResponses.From(task, loaded.Catalogue, now)),
-			Storage.AppendEvents(task.Id, loaded.TaskVersion, TaskWrites.TaskEvents(loaded)), TaskWrites.TrackerEvents(loaded));
+		return (TaskWrites.Response(loaded, now),
+			Storage.AppendEvents(task.Id, loaded.TaskVersion, TaskWrites.TaskEvents(loaded)), TaskWrites.OtherEvents(loaded),
+			TaskWrites.TrackerEvents(loaded));
 	}
 }

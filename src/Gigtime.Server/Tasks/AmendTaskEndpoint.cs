@@ -24,7 +24,7 @@ public static class AmendTaskEndpoint
 	public static EnvelopeResult? Validate([NotBody] LoadedCorrection loaded) => loaded.Refusal;
 
 	[WolverinePost("/v1/tasks/{id}/amend")]
-	public static (Envelope<TaskDto>, AppendEvents) Handle(string id,
+	public static (Envelope<TaskDto>, AppendEvents, AppendEvents) Handle(string id,
 		AmendTaskInput request,
 		[NotBody] LoadedCorrection loaded,
 		DateTimeOffset now)
@@ -32,6 +32,7 @@ public static class AmendTaskEndpoint
 		var task = TaskWrites.After(loaded.Loaded);
 
 		return (Envelopes.Success("amend", TaskResponses.From(task, loaded.Loaded.Catalogue, now)),
-			Storage.AppendEvents(task.Id, loaded.Loaded.TaskVersion, TaskWrites.TaskEvents(loaded.Loaded)));
+			Storage.AppendEvents(task.Id, loaded.Loaded.TaskVersion, TaskWrites.TaskEvents(loaded.Loaded)),
+			TaskWrites.TrackerEvents(loaded.Loaded));
 	}
 }

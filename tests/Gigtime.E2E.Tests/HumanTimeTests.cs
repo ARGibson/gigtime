@@ -16,7 +16,7 @@ public sealed partial class HumanTimeTests(PublishedFixture published)
 		await day.CatalogueAsync();
 		await day.SuccessAsync("client", "set", "acme", "--timezone", "America/New_York");
 		var start = await day.HumanAsync("start", "acme", "work");
-		var task = (await day.SuccessAsync("status")).GetProperty("task");
+		var task = (await day.SuccessAsync("status")).GetProperty("running");
 		var id = task.GetProperty("id").GetString()!;
 		task.GetProperty("timezone").GetString().ShouldBe("America/New_York");
 

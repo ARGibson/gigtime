@@ -25,11 +25,11 @@ public sealed class InstanceTests(PublishedFixture published)
 		await one.CatalogueAsync();
 		await two.CatalogueAsync();
 		var task = await one.SuccessAsync("start", "acme", "work");
-		(await two.SuccessAsync("status")).GetProperty("task").ValueKind.ShouldBe(JsonValueKind.Null);
+		(await two.SuccessAsync("status")).GetProperty("running").ValueKind.ShouldBe(JsonValueKind.Null);
 		(await two.SuccessAsync("log")).GetProperty("tasks").GetArrayLength().ShouldBe(0);
 		var otherTask = await two.SuccessAsync("start", "acme", "work");
 		otherTask.GetProperty("id").GetString().ShouldNotBe(task.GetProperty("id").GetString());
-		(await one.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString().ShouldBe(task.GetProperty("id").GetString());
+		(await one.SuccessAsync("status")).GetProperty("running").GetProperty("id").GetString().ShouldBe(task.GetProperty("id").GetString());
 		var firstSetup = await one.SuccessAsync("setup", "--check");
 		var secondSetup = await two.SuccessAsync("setup", "--check");
 		firstSetup.GetProperty("socket_path").GetString().ShouldNotBe(secondSetup.GetProperty("socket_path").GetString());
@@ -53,7 +53,12 @@ public sealed class InstanceTests(PublishedFixture published)
 		}
 
 		(await one.SuccessAsync("stop")).GetProperty("id").GetString().ShouldBe(task.GetProperty("id").GetString());
-		(await two.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString().ShouldBe(otherTask.GetProperty("id").GetString());
+
+		(await two.SuccessAsync("status"))
+			.GetProperty("running")
+			.GetProperty("id")
+			.GetString()
+			.ShouldBe(otherTask.GetProperty("id").GetString());
 	}
 
 	[Theory]

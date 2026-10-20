@@ -46,12 +46,12 @@ internal sealed class ReportScenario
 
 	private void Apply(TaskView task, OpenTask tracker, TaskCommand command)
 	{
-		var result = TaskDecider.Decide(task, tracker, Catalogue.State, command);
+		var result = TaskDecider.Decide(task, tracker, Catalogue.State, command, [task]);
 		result.Error.ShouldBeNull();
 
 		foreach (var e in result.Events)
 		{
-			if (e is OpenTaskSet or OpenTaskCleared) tracker.Evolve(e);
+			if (e is OpenTaskSet or OpenTaskCleared or TaskOpened or TaskClosed or TrackerAdvanced) tracker.Evolve(e);
 			else task.Evolve(e);
 		}
 	}

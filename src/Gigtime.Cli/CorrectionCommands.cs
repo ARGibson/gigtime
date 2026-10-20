@@ -10,27 +10,53 @@ internal static class CorrectionCommands
 {
 	internal static void Configure(RootCommand root, CliExchange exchange)
 	{
-		var add = Add(root, "add", "Backfill a stopped task without changing the open task.");
-		Argument(add, "client");
-		Argument(add, "project");
+		var add = Add(root, "add", "Backfill a new task or add an interval to an existing task.");
+		Argument(add, "target");
+		Argument(add, "project", true);
 		Time(add, "from", true);
 		Time(add, "to", true);
 		Text(add, "ref");
 		Text(add, "rate");
 
-		add.SetAction((r, ct) => exchange.WriteAsync(r,
-			"add",
-			HttpMethod.Post,
-			"/v1/tasks/add",
-			new RecordTaskInput(r.GetValue<string>("client")!,
-				r.GetValue<string>("project")!,
-				r.GetValue<string>("--from")!,
-				r.GetValue<string>("--to")!,
-				r.GetValue<string>("--ref"),
-				r.GetValue<string>("--rate")),
-			GigtimeJsonContext.Default.RecordTaskInput,
-			GigtimeJsonContext.Default.TaskResponse,
-			ct));
+		add.SetAction((r, ct) =>
+		{
+			var target = r.GetValue<string>("target")!;
+			var project = r.GetValue<string>("project");
+
+			if (project is null)
+			{
+				if (r.GetValue<string>("--ref") is not null || r.GetValue<string>("--rate") is not null)
+				{
+					return Task.FromResult(exchange.Fail("add",
+						ErrorCodes.Validation,
+						"Adding an interval to a task takes no --ref or --rate.",
+						r.GetValue<bool>("--json")));
+				}
+
+				return exchange.WriteAsync(r,
+					"add",
+					HttpMethod.Post,
+					"/v1/tasks/" + Segment(target) + "/add",
+					new AddIntervalInput(r.GetValue<string>("--from")!, r.GetValue<string>("--to")!),
+					GigtimeJsonContext.Default.AddIntervalInput,
+					GigtimeJsonContext.Default.TaskResponse,
+					ct);
+			}
+
+			return exchange.WriteAsync(r,
+				"add",
+				HttpMethod.Post,
+				"/v1/tasks/add",
+				new RecordTaskInput(target,
+					project,
+					r.GetValue<string>("--from")!,
+					r.GetValue<string>("--to")!,
+					r.GetValue<string>("--ref"),
+					r.GetValue<string>("--rate")),
+				GigtimeJsonContext.Default.RecordTaskInput,
+				GigtimeJsonContext.Default.TaskResponse,
+				ct);
+		});
 
 		var amend = Add(root, "amend", "Correct an unsubmitted task.");
 		Argument(amend, "task");

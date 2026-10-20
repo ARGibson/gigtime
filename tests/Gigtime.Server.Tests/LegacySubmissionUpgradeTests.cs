@@ -137,7 +137,7 @@ public sealed class LegacySubmissionUpgradeTests
 		}
 
 		(await app.GetAsync<TaskDto>("/v1/tasks/cccccc")).Data!.State.ShouldBe("voided");
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Id.ShouldBe("dddddd");
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running!.Id.ShouldBe("dddddd");
 		(await app.GetAsync<TaskDto>("/v1/tasks/dddddd")).Data!.Submission.ShouldBeNull();
 		var before = await ExportAsync(app);
 		var exported = before.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => JsonSerializer.Deserialize<JsonElement>(line));

@@ -43,7 +43,8 @@ public sealed partial class ReadmeTests
 	{
 		(string Name, Type Type)[] shapes =
 		[
-			("Envelope", typeof(Envelope<TaskDto>)), ("Error", typeof(ErrorDto)), ("Error state", typeof(ErrorStateDto)),
+			("Envelope", typeof(Envelope<TaskDto>)), ("Warning", typeof(WarningDto)),
+			("Error", typeof(ErrorDto)), ("Error state", typeof(ErrorStateDto)),
 			("Defaults", typeof(DefaultsDto)), ("Client", typeof(ClientDto)), ("Project", typeof(ProjectDto)),
 			("Client list", typeof(ClientsDto)), ("Project list", typeof(ProjectsDto)), ("Entity", typeof(EntityDto)),
 			("Money", typeof(MoneyDto)), ("Task", typeof(TaskDto)), ("Interval", typeof(IntervalDto)),
@@ -82,7 +83,7 @@ public sealed partial class ReadmeTests
 	[Fact]
 	public void Status_and_setup_json_include_explicit_instance_even_for_default()
 	{
-		var status = System.Text.Json.JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(null)),
+		var status = System.Text.Json.JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(null, [])),
 			GigtimeJsonContext.Default.StatusResponse);
 
 		status.ShouldContain("\"instance\":null");

@@ -10,4 +10,6 @@ public sealed record LoadedTaskCommand(
 	long TrackerVersion,
 	TaskCommand Command,
 	Decision Decision,
-	string CorrelationId);
+	string CorrelationId,
+	IReadOnlyList<TaskView>? OpenTasks = null,
+	IReadOnlyDictionary<string, long>? Versions = null);

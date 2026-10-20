@@ -170,7 +170,7 @@ public sealed class SubmissionTests
 		var result = (await app.PostAsync<TaskDto>("/v1/tasks/stop?submit=true", correlationId: "atomic-submit")).Data!;
 		result.State.ShouldBe("submitted");
 		result.Submission!.RoundedSeconds.ShouldBe(60);
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task.ShouldBeNull();
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running.ShouldBeNull();
 		var factory = app.Host.Services.GetRequiredService<IDocumentSessionFactory>();
 		await using var session = factory.QuerySession();
 		var events = await session.Events.FetchStreamAsync(id, token: TestContext.Current.CancellationToken);

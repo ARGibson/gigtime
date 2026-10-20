@@ -23,7 +23,7 @@ public sealed class CorrectionTests
 		added.RoundedSeconds.ShouldBe(120);
 		added.Submission.ShouldBeNull();
 		added.Rate.ShouldBeNull();
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Id.ShouldBe(open.Id);
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running!.Id.ShouldBe(open.Id);
 		(await app.GetAsync<ReportDto>("/v1/report")).Data!.Unsubmitted.Single(t => t.TaskId == added.Id).RawSeconds.ShouldBe(91);
 	}
 

@@ -23,6 +23,7 @@ public sealed class TaskView
 	public TaskSubmission? Submission { get; set; }
 	public DateTimeOffset? StartedAt { get; set; }
 	public DateTimeOffset? StoppedAt { get; set; }
+	public DateTimeOffset? PausedAt { get; set; }
 	public long RawSeconds => Timeline.Sum(i => i.Seconds);
 
 	public long RawSecondsAt(DateTimeOffset now)
@@ -49,12 +50,29 @@ public sealed class TaskView
 	{
 		Close(e.At);
 		State = TaskState.Paused;
+		PausedAt = e.At;
 	}
 
 	public void Apply(TaskResumed e)
 	{
-		Timeline.Add(new(Timeline.Count + 1, e.At, null));
+		Timeline.Add(new(NextIntervalNumber(), e.At, null));
 		State = TaskState.Running;
+		PausedAt = null;
+	}
+
+	public void Apply(TaskReopened e)
+	{
+		Apply(new TaskResumed(e.At));
+		StoppedAt = null;
+	}
+
+	public void Apply(IntervalAdded e)
+	{
+		if (State == TaskState.Paused && PausedAt is null) PausedAt = Timeline[^1].End;
+		Timeline.Add(new(e.Interval, e.Start, e.End));
+		OrderTimeline();
+		StartedAt = Timeline[0].Start;
+		if (State == TaskState.Stopped) StoppedAt = Timeline[^1].End;
 	}
 
 	public void Apply(TaskStopped e)
@@ -62,6 +80,7 @@ public sealed class TaskView
 		if (State == TaskState.Running) Close(e.At);
 		State = TaskState.Stopped;
 		StoppedAt = e.At;
+		PausedAt = null;
 #pragma warning disable CS0618 // Legacy event projection retains the migration input.
 		LegacySnapshot = e.Rounding is { } rounding && e.Currency is { } currency ? new(rounding, e.Rate, currency) : null;
 #pragma warning restore CS0618
@@ -98,6 +117,7 @@ public sealed class TaskView
 
 	public void Apply(IntervalAmended e)
 	{
+		if (State == TaskState.Paused && PausedAt is null) PausedAt = Timeline[^1].End;
 		var index = Timeline.FindIndex(i => i.Number == e.Interval);
 		var old = Timeline[index];
 
@@ -107,6 +127,7 @@ public sealed class TaskView
 			End = e.End ?? old.End,
 		};
 
+		OrderTimeline();
 		StartedAt = Timeline[0].Start;
 		if (State == TaskState.Stopped) StoppedAt = Timeline[^1].End;
 	}
@@ -128,6 +149,14 @@ public sealed class TaskView
 
 				break;
 			case TaskResumed x:
+				Apply(x);
+
+				break;
+			case TaskReopened x:
+				Apply(x);
+
+				break;
+			case IntervalAdded x:
 				Apply(x);
 
 				break;
@@ -170,6 +199,19 @@ public sealed class TaskView
 			default: throw new ArgumentException("Not a task event.", nameof(e));
 		}
 	}
+
+	private int NextIntervalNumber() => Timeline.Count == 0 ? 1 : Timeline.Max(interval => interval.Number) + 1;
+
+	private void OrderTimeline() => Timeline.Sort((left, right) =>
+	{
+		var order = left.Start.CompareTo(right.Start);
+
+		if (order != 0) return order;
+		if (left.End is null && right.End is not null) return 1;
+		if (left.End is not null && right.End is null) return -1;
+
+		return left.Number.CompareTo(right.Number);
+	});
 
 	private void Close(DateTimeOffset at)
 	{

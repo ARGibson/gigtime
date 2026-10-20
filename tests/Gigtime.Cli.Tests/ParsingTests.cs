@@ -11,11 +11,13 @@ public sealed class ParsingTests
 {
 	public static IEnumerable<object[]> InvalidArguments => new string[][]
 	{
-		[], ["unknown"], ["defaults"], ["client", "add", "example"], ["project", "add", "example"], ["start", "example"], ["pause", "extra"],
-		["resume", "--nope"], ["stop", "--ref", "x"], ["status", "--all"], ["show"], ["log", "--last", "bad"], ["log", "--last", "0"],
-		["log", "--last", "-1"], ["log", "--last", "2147483648"], ["log", "--all", "bad"], ["defaults", "set", "--timezone"],
-		["client", "set", "a", "--timezone", "UTC", "--clear-timezone"], ["client", "set", "a", "--rounding", "none", "--clear-rounding"],
-		["project", "set", "a", "b", "--rate", "2", "--clear-rate"], ["project", "set", "a", "b", "--rounding", "none", "--clear-rounding"],
+		[], ["unknown"], ["defaults"], ["client", "add", "example"], ["project", "add", "example"], ["start", "example"],
+		["pause", "abcdef", "extra"], ["resume", "--nope"], ["pause", "--nope"], ["stop", "--nope"],
+		["add", "--nope", "--from", "09:00", "--to", "10:00"], ["stop", "--ref", "x"], ["status", "--all"], ["show"],
+		["log", "--last", "bad"], ["log", "--last", "0"], ["log", "--last", "-1"], ["log", "--last", "2147483648"], ["log", "--all", "bad"],
+		["defaults", "set", "--timezone"], ["client", "set", "a", "--timezone", "UTC", "--clear-timezone"],
+		["client", "set", "a", "--rounding", "none", "--clear-rounding"], ["project", "set", "a", "b", "--rate", "2", "--clear-rate"],
+		["project", "set", "a", "b", "--rounding", "none", "--clear-rounding"],
 	}.SelectMany(args => new[] { new object[] { args, false }, [args, true] });
 
 	[Theory]
