@@ -284,11 +284,12 @@ refuses instead of pausing it. If nothing runs, the confirmed switch proceeds.
 The API carries this optional guard as `switch_from` in a start request or a resume
 query parameter. Plain `--switch` requests carry no expected running id.
 
-`add` takes one positional task id to append an interval, or a client and project to
-create a stopped task. Existing-task additions take neither `--ref` nor `--rate`, and must end after they start.
-Intervals keep their numbers and appear in time order; touching ends are allowed,
-overlaps within a task are refused. Added time on a running task ends no later than
-its running interval starts. Submitted and voided tasks refuse additions.
+`add` takes one positional task id to append an interval, or a client and
+project to create a stopped task. Existing-task additions take neither `--ref`
+nor `--rate`, and must end after they start. Intervals keep their numbers and
+appear in time order; touching ends are allowed, overlaps within a task are
+refused. Added time on a running task ends no later than its running interval
+starts. Submitted and voided tasks refuse additions.
 
 A non-empty ref repeating an open task's ref in the same project adds a `repeated_ref`
 warning without blocking creation. Human warnings go to stderr; JSON includes them
