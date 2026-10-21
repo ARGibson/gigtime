@@ -17,7 +17,7 @@ public sealed class TaskTimezoneTests
 		task.Timezone.ShouldBe("America/New_York");
 		task.StartedAt.ShouldBe(app.Clock.Now);
 		task.StartedAt.Offset.ShouldBe(TimeSpan.Zero);
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!.Timezone.ShouldBe(task.Timezone);
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running!.Timezone.ShouldBe(task.Timezone);
 		(await app.GetAsync<TasksDto>("/v1/tasks")).Data!.Tasks.Single().Timezone.ShouldBe(task.Timezone);
 		await app.PatchAsync<ClientDto>("/v1/clients/example", new ChangeClientRequest(Timezone: "Europe/London"));
 		var read = (await app.GetAsync<TaskDto>("/v1/tasks/" + task.Id)).Data!;

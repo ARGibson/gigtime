@@ -36,7 +36,7 @@ namespace Internal.Generated.WolverineHandlers
             System.Diagnostics.Activity.Current?.SetTag("handler.type", "Gigtime.Server.Tasks.ResumeTaskEndpoint");
             var dateTimeOffset = _timeProvider.GetUtcNow();
             var loadedTaskCommand = await Gigtime.Server.Tasks.ResumeTaskEndpoint.LoadAsync(eventStoreOperations, httpContext, dateTimeOffset, httpContext.RequestAborted).ConfigureAwait(false);
-            var result1 = Gigtime.Server.Tasks.ResumeTaskEndpoint.Validate(loadedTaskCommand);
+            var result1 = Gigtime.Server.Tasks.ResumeTaskEndpoint.Validate(loadedTaskCommand, httpContext);
             // Evaluate whether or not the execution should be stopped based on the IResult value
             if (result1 != null && !(result1 is Wolverine.Http.WolverineContinue))
             {
@@ -46,7 +46,7 @@ namespace Internal.Generated.WolverineHandlers
 
             
             // The actual HTTP request handler execution
-            (var envelopeOfTaskDto_response, var appendEvents, var appendEvents2) = Gigtime.Server.Tasks.ResumeTaskEndpoint.Handle(loadedTaskCommand, dateTimeOffset);
+            (var envelopeOfTaskDto_response, var appendEvents, var appendEvents2, var appendEvents3) = Gigtime.Server.Tasks.ResumeTaskEndpoint.Handle(loadedTaskCommand, dateTimeOffset);
 
             if (appendEvents != null)
             {
@@ -60,6 +60,13 @@ namespace Internal.Generated.WolverineHandlers
                 
                 // Append events through the registered event store
                 appendEvents2.Execute(eventOperations);
+            }
+
+            if (appendEvents3 != null)
+            {
+                
+                // Append events through the registered event store
+                appendEvents3.Execute(eventOperations);
             }
 
             

@@ -5,12 +5,18 @@ namespace Gigtime.Domain.Tasks;
 /// <summary>Pure decisions; the host routes tracker events separately and commits both streams atomically.</summary>
 public static class TaskDecider
 {
-	public static Decision Decide(TaskView task, OpenTask tracker, CatalogueView catalogue, TaskCommand command)
+	public static Decision Decide(TaskView task,
+		OpenTask tracker,
+		CatalogueView catalogue,
+		TaskCommand command,
+		IReadOnlyList<TaskView> openTasks)
 	{
 		ArgumentNullException.ThrowIfNull(task);
 		ArgumentNullException.ThrowIfNull(tracker);
 		ArgumentNullException.ThrowIfNull(catalogue);
 		ArgumentNullException.ThrowIfNull(command);
+
+		ArgumentNullException.ThrowIfNull(openTasks);
 
 		if (task.State == TaskState.Submitted)
 		{
@@ -19,8 +25,8 @@ public static class TaskDecider
 				: Transition(task, command);
 		}
 
-		if (command is StartTask start) return Start(task, tracker, catalogue, start);
-		if (command is RecordTask record) return Record(task, catalogue, record);
+		if (command is StartTask start) return Start(task, tracker, catalogue, start, openTasks);
+		if (command is RecordTask record) return Record(task, tracker, catalogue, record, openTasks);
 
 		if (task.State == TaskState.Missing)
 			return Decision.Refuse("not_found", "No task exists for this command.", "missing", command.Command, "gig start");
@@ -28,8 +34,9 @@ public static class TaskDecider
 		return command switch
 		{
 			PauseTask c when task.State == TaskState.Running => Close(task, tracker, catalogue, c, c.At, false),
-			ResumeTask c when task.State == TaskState.Paused => Resume(task, tracker, c),
+			ResumeTask c when task.State is TaskState.Paused or TaskState.Stopped => Resume(task, tracker, c, openTasks),
 			StopTask c when task.State is TaskState.Running or TaskState.Paused => Close(task, tracker, catalogue, c, c.At, true),
+			AddInterval c when task.State is TaskState.Running or TaskState.Paused or TaskState.Stopped => Add(task, c),
 			VoidTask c when task.State == TaskState.Stopped => Decision.Accept(new TaskVoided(c.Reason)),
 			AmendInterval c when task.State != TaskState.Voided => Amend(task, c),
 			ReassignTask c when task.State != TaskState.Voided => Reassign(task, catalogue, c),
@@ -40,36 +47,27 @@ public static class TaskDecider
 		};
 	}
 
-	private static Decision Start(TaskView task, OpenTask tracker, CatalogueView catalogue, StartTask c)
+	private static Decision Start(TaskView task, OpenTask tracker, CatalogueView catalogue, StartTask c, IReadOnlyList<TaskView> openTasks)
 	{
 		if (task.State != TaskState.Missing) return Transition(task, c);
-
-		if (tracker.TaskId is { } open)
-		{
-			return Decision.Refuse("invalid_transition",
-				$"The open task {open} must be stopped before starting another.",
-				"open",
-				c.Command,
-				"gig stop");
-		}
-
 		if (!TaskIds.IsValid(c.TaskId)) return Invalid(task, c, "Use a six-character lowercase hex task id.");
 		if (ProjectRefusal(catalogue, c.ProjectId, c) is { } error) return error;
-
 		if (c.Rate < 0) return Invalid(task, c, "Task rate cannot be negative.");
 
-		var events = new List<object>
-		{
-			new TaskStarted(c.TaskId, c.ProjectId, c.Ref, TaskMath.Instant(c.At))
-		};
+		var at = TaskMath.Instant(c.At);
+		var switching = TaskSwitch.Decide(c.TaskId, tracker, openTasks, c.Command, at, c.Switch, c.SwitchFrom);
 
+		if (!switching.IsSuccess) return switching;
+
+		var events = switching.Events.ToList();
+		events.Add(new TaskStarted(c.TaskId, c.ProjectId, c.Ref, at));
 		if (c.Rate is { } rate) events.Add(new TaskRateSet(rate, catalogue.Resolve(c.ProjectId).Currency));
-		events.Add(new OpenTaskSet(c.TaskId));
+		events.Add(new TaskOpened(c.TaskId));
 
-		return Decision.Accept(events.ToArray());
+		return new(events, Warnings: TaskWarnings.RepeatedRef(c.ProjectId, c.Ref, tracker, openTasks));
 	}
 
-	private static Decision Record(TaskView task, CatalogueView catalogue, RecordTask c)
+	private static Decision Record(TaskView task, OpenTask tracker, CatalogueView catalogue, RecordTask c, IReadOnlyList<TaskView> openTasks)
 	{
 		if (task.State != TaskState.Missing) return Transition(task, c);
 
@@ -87,18 +85,23 @@ public static class TaskDecider
 
 		if (c.Rate is { } rate) events.Add(new TaskRateSet(rate, catalogue.Resolve(c.ProjectId).Currency));
 
-		return Decision.Accept(events.ToArray());
+		events.Add(new TrackerAdvanced());
+
+		return new(events, Warnings: TaskWarnings.RepeatedRef(c.ProjectId, c.Ref, tracker, openTasks));
 	}
 
 	private static Decision Close(TaskView task, OpenTask tracker, CatalogueView catalogue, TaskCommand c, DateTimeOffset instant, bool stop)
 	{
-		if (tracker.TaskId != task.Id) return Transition(task, c);
+		if (!tracker.TaskIds.Contains(task.Id)) return Transition(task, c);
 
 		var at = TaskMath.Instant(instant);
-		var last = task.Timeline[^1];
 
-		if (at < (last.End ?? last.Start)) return Invalid(task, c, "The instant precedes the last interval boundary.");
-		if (!stop) return Decision.Accept(new TaskPaused(at));
+		var boundary = task.State == TaskState.Running
+			? task.RunningStart()
+			: task.LatestEnd();
+
+		if (at < boundary) return Invalid(task, c, "The instant precedes the last interval boundary.");
+		if (!stop) return Decision.Accept(new TaskPaused(at), new TrackerAdvanced());
 
 		if (c is StopTask { Submit: true })
 		{
@@ -106,10 +109,10 @@ public static class TaskDecider
 
 			var figures = TaskFigures.Resolve(task, catalogue, at);
 
-			return Decision.Accept(new TaskStopped(at), Submitted(at, figures), new OpenTaskCleared());
+			return Decision.Accept(new TaskStopped(at), Submitted(at, figures), new TaskClosed(task.Id));
 		}
 
-		return Decision.Accept(new TaskStopped(at), new OpenTaskCleared());
+		return Decision.Accept(new TaskStopped(at), new TaskClosed(task.Id));
 	}
 
 	private static TaskSubmitted Submitted(DateTimeOffset at, TaskFigures figures)
@@ -140,15 +143,41 @@ public static class TaskDecider
 		return Decision.Accept(new TaskRateSet(c.Rate, c.Rate is null ? null : catalogue.Resolve(task.ProjectId).Currency));
 	}
 
-	private static Decision Resume(TaskView task, OpenTask tracker, ResumeTask c)
+	private static Decision Resume(TaskView task, OpenTask tracker, ResumeTask c, IReadOnlyList<TaskView> openTasks)
 	{
-		if (tracker.TaskId != task.Id) return Transition(task, c);
+		if (task.State == TaskState.Paused && !tracker.TaskIds.Contains(task.Id)) return Transition(task, c);
 
 		var at = TaskMath.Instant(c.At);
+		var boundary = task.LatestEnd();
+		if (task.StoppedAt is { } stopped && (boundary is null || stopped > boundary)) boundary = stopped;
 
-		if (at < task.Timeline[^1].End) return Invalid(task, c, "Resume cannot precede the last interval endpoint.");
+		if (at < boundary) return Invalid(task, c, "Resume cannot precede the last interval endpoint or stop.");
 
-		return Decision.Accept(new TaskResumed(at));
+		var switching = TaskSwitch.Decide(task.Id, tracker, openTasks, c.Command, at, c.Switch, c.SwitchFrom);
+
+		if (!switching.IsSuccess) return switching;
+
+		var events = switching.Events.ToList();
+		events.Add(task.State == TaskState.Stopped ? new TaskReopened(at) : new TaskResumed(at));
+		events.Add(task.State == TaskState.Stopped ? new TaskOpened(task.Id) : new TrackerAdvanced());
+
+		return Decision.Accept(events.ToArray());
+	}
+
+	private static Decision Add(TaskView task, AddInterval c)
+	{
+		var start = TaskMath.Instant(c.Start);
+		var end = TaskMath.Instant(c.End);
+
+		if (end <= start) return Invalid(task, c, "An added interval must end after its start.");
+
+		if (task.State == TaskState.Running && end > task.RunningStart())
+			return Invalid(task, c, "An added interval must end at or before the running interval starts.");
+
+		if (!IntervalOrdering.IsValid(task.Timeline.Append(new(0, start, end))))
+			return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
+
+		return Decision.Accept(new IntervalAdded(task.Timeline.Max(interval => interval.Number) + 1, start, end), new TrackerAdvanced());
 	}
 
 	private static Decision Reassign(TaskView task, CatalogueView catalogue, ReassignTask c)
@@ -185,13 +214,8 @@ public static class TaskDecider
 			End = c.End is { } end ? TaskMath.Instant(end) : old.End,
 		};
 
-		for (var i = 0; i < intervals.Length; i++)
-		{
-			var interval = intervals[i];
-
-			if (interval.End < interval.Start || (i > 0 && intervals[i - 1].End > interval.Start))
-				return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
-		}
+		if (!IntervalOrdering.IsValid(intervals))
+			return Invalid(task, c, "Intervals must remain ordered and non-overlapping.");
 
 		return Decision.Accept(new IntervalAmended(c.Interval,
 			c.Start is { } s ? TaskMath.Instant(s) : null,
@@ -226,7 +250,7 @@ public static class TaskDecider
 			(TaskState.Running or TaskState.Paused, StartTask or RecordTask or VoidTask) => "gig stop",
 			(TaskState.Paused, PauseTask) => "gig resume",
 			(TaskState.Stopped or TaskState.Voided, StartTask or RecordTask) => null,
-			(TaskState.Stopped, PauseTask or ResumeTask or StopTask) => "gig start",
+			(TaskState.Stopped, PauseTask or StopTask) => "gig resume " + task.Id,
 			(TaskState.Voided, _) => "gig start",
 			_ => null,
 		};
@@ -237,6 +261,6 @@ public static class TaskDecider
 			_ => $"Task {task.Id} is {State(task)}; {c.Command} does not apply." + (hint is null ? "" : $" Use {hint}."),
 		};
 
-		return Decision.Refuse("invalid_transition", message, State(task), c.Command, hint);
+		return Decision.Refuse("invalid_transition", message, State(task), c.Command, hint, task.Id.Length == 0 ? null : task.Id);
 	}
 }

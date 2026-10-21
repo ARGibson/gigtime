@@ -63,7 +63,7 @@ public static class StoreRegistration
 					}
 
 					if (await session.Events.FetchStreamStateAsync(OpenTask.StreamId, token) is null)
-						session.Events.StartStream<OpenTask>(OpenTask.StreamId, new OpenTaskCleared());
+						session.Events.StartStream<OpenTask>(OpenTask.StreamId, new TrackerAdvanced());
 
 					await session.SaveChangesAsync(token);
 				});
@@ -88,6 +88,9 @@ public static class StoreRegistration
 
 	public sealed class TrackerProjection : SingleStreamProjection<OpenTask, string>
 	{
+		public void Apply(TaskOpened e, OpenTask state) => state.Apply(e);
+		public void Apply(TaskClosed e, OpenTask state) => state.Apply(e);
+		public void Apply(TrackerAdvanced e, OpenTask state) => state.Evolve(e);
 		public void Apply(OpenTaskSet e, OpenTask state) => state.Apply(e);
 		public void Apply(OpenTaskCleared e, OpenTask state) => state.Apply(e);
 	}
@@ -96,6 +99,8 @@ public static class StoreRegistration
 	{
 		public void Apply(TaskStarted e, TaskView state) => state.Apply(e);
 		public void Apply(TaskPaused e, TaskView state) => state.Apply(e);
+		public void Apply(TaskReopened e, TaskView state) => state.Apply(e);
+		public void Apply(IntervalAdded e, TaskView state) => state.Apply(e);
 		public void Apply(TaskResumed e, TaskView state) => state.Apply(e);
 		public void Apply(TaskStopped e, TaskView state) => state.Apply(e);
 		public void Apply(TaskRateSet e, TaskView state) => state.Apply(e);

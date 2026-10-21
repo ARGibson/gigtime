@@ -24,11 +24,13 @@ public static class AddTaskEndpoint
 	public static EnvelopeResult? Validate([NotBody] LoadedCorrection loaded) => loaded.Refusal;
 
 	[WolverinePost("/v1/tasks/add")]
-	public static (Envelope<TaskDto>, StartStream) Handle(RecordTaskInput request, [NotBody] LoadedCorrection loaded, DateTimeOffset now)
+	public static (Envelope<TaskDto>, StartStream, AppendEvents) Handle(RecordTaskInput request,
+		[NotBody] LoadedCorrection loaded,
+		DateTimeOffset now)
 	{
 		var task = TaskWrites.After(loaded.Loaded);
 
-		return (Envelopes.Success("add", TaskResponses.From(task, loaded.Loaded.Catalogue, now)),
-			Storage.StartStream<TaskView>(task.Id, TaskWrites.TaskEvents(loaded.Loaded)));
+		return (TaskWrites.Response(loaded.Loaded, now),
+			Storage.StartStream<TaskView>(task.Id, TaskWrites.TaskEvents(loaded.Loaded)), TaskWrites.TrackerEvents(loaded.Loaded));
 	}
 }

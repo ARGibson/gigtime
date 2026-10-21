@@ -21,22 +21,25 @@ public static class StartTaskEndpoint
 				catalogue.FindProject(catalogue.FindClient(request.Client)?.Id ?? Guid.Empty, request.Project)?.Id ?? Guid.Empty,
 				request.Ref,
 				now,
-				CatalogueWrites.Rate(request.Rate)),
+				CatalogueWrites.Rate(request.Rate),
+				request.Switch,
+				request.SwitchFrom),
 			true,
 			cancellationToken);
 	}
 
-	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded) => EnvelopeResult.From(loaded.Decision, loaded.Tracker.TaskId);
+	public static EnvelopeResult? Validate([NotBody] LoadedTaskCommand loaded) => EnvelopeResult.From(loaded.Decision, loaded.Task.Id);
 
 	[WolverinePost("/v1/tasks/start")]
-	public static (Envelope<TaskDto>, StartStream, AppendEvents) Handle(
+	public static (Envelope<TaskDto>, StartStream, AppendEvents?, AppendEvents) Handle(
 		StartTaskRequest request,
 		[NotBody] LoadedTaskCommand loaded,
 		DateTimeOffset now)
 	{
 		var task = TaskWrites.After(loaded);
 
-		return (Envelopes.Success("start", TaskResponses.From(task, loaded.Catalogue, now)),
-			Storage.StartStream<TaskView>(task.Id, TaskWrites.TaskEvents(loaded)), TaskWrites.TrackerEvents(loaded));
+		return (TaskWrites.Response(loaded, now),
+			Storage.StartStream<TaskView>(task.Id, TaskWrites.TaskEvents(loaded)), TaskWrites.OtherEvents(loaded),
+			TaskWrites.TrackerEvents(loaded));
 	}
 }

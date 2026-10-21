@@ -44,7 +44,7 @@ public sealed class CommandTests(PublishedFixture published)
 		await using var day = new DaySession(published);
 		await day.StartAsync();
 		await day.CatalogueAsync();
-		foreach (var command in new[] { "pause", "resume", "stop" }) await day.RefusalAsync(4, "not_found", command);
+		foreach (var command in new[] { "pause", "resume", "stop" }) await day.RefusalAsync(3, "invalid_transition", command);
 		await day.RefusalAsync(4, "not_found", "start", "missing", "work");
 		await day.RefusalAsync(4, "not_found", "show", "ffffff");
 		await day.RefusalAsync(2, "usage", "log", "--last", "0");
@@ -58,7 +58,7 @@ public sealed class CommandTests(PublishedFixture published)
 		var added = await day.SuccessAsync("add", "acme", "work", "--from", "2026-03-02T09:00:00Z", "--to", "2026-03-02T10:00:00Z");
 		var id = added.GetProperty("id").GetString()!;
 		added.GetProperty("raw_seconds").GetInt64().ShouldBe(3600);
-		(await day.SuccessAsync("status")).GetProperty("task").GetProperty("id").GetString().ShouldBe(open);
+		(await day.SuccessAsync("status")).GetProperty("paused").EnumerateArray().Single().GetProperty("id").GetString().ShouldBe(open);
 		await day.RefusalAsync(8, "validation", "add", "acme", "work", "--from", "2026-03-02T11:00:00Z", "--to", "2026-03-02T10:00:00Z");
 		await day.RefusalAsync(8, "validation", "amend", id, "--interval", "1", "--end", "2026-03-02T08:00:00Z");
 		(await day.SuccessAsync("show", id)).GetProperty("raw_seconds").GetInt64().ShouldBe(3600);
@@ -66,7 +66,7 @@ public sealed class CommandTests(PublishedFixture published)
 		(await day.SuccessAsync("show", id)).GetProperty("ref").GetString().ShouldBe("opaque");
 		await day.SuccessAsync("amend", id, "--clear-ref");
 		await day.SuccessAsync("stop");
-		await day.RefusalAsync(4, "not_found", "stop");
+		await day.RefusalAsync(3, "invalid_transition", "stop");
 		await day.SuccessAsync("void", id);
 		await day.RefusalAsync(3, "invalid_transition", "void", id);
 		await day.RefusalAsync(3, "invalid_transition", "amend", id, "--ref", "opaque");

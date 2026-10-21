@@ -75,7 +75,9 @@ public sealed class RenderingTests
 	[Fact]
 	public async Task Status_without_an_open_task_prints_none()
 	{
-		var response = JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(null)), GigtimeJsonContext.Default.StatusResponse);
+		var response =
+			JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(null, [])), GigtimeJsonContext.Default.StatusResponse);
+
 		await using var server = await FakeServer.StartAsync(response);
 		using var output = new StringWriter(CultureInfo.InvariantCulture);
 		using var error = new StringWriter(CultureInfo.InvariantCulture);
@@ -105,7 +107,10 @@ public sealed class RenderingTests
 			],
 		};
 
-		var response = JsonSerializer.Serialize(Envelopes.Success("status", new StatusDto(task)), GigtimeJsonContext.Default.StatusResponse);
+		var response = JsonSerializer.Serialize(Envelopes.Success("status",
+				new StatusDto(state == "running" ? task : null, state == "paused" ? [task] : [])),
+			GigtimeJsonContext.Default.StatusResponse);
+
 		await using var server = await FakeServer.StartAsync(response);
 		using var output = new StringWriter(CultureInfo.InvariantCulture);
 		using var error = new StringWriter(CultureInfo.InvariantCulture);
@@ -127,7 +132,7 @@ public sealed class RenderingTests
 	public async Task Json_output_preserves_the_original_envelope_including_extra_fields(bool ok)
 	{
 		var response = ok
-			? " { \"ok\": true, \"command\": \"status\", \"data\": { \"task\": null }, \"extra\": { \"version\": 2 } }\n"
+			? " { \"ok\": true, \"command\": \"status\", \"data\": { \"running\": null, \"paused\": [] }, \"extra\": { \"version\": 2 } }\n"
 			: " { \"ok\": false, \"command\": \"status\", \"error\": { \"code\": \"conflict\", \"message\": \"busy\" }, \"extra\": 2 }\n";
 
 		await using var server = await FakeServer.StartAsync(response, ok ? 200 : 409);

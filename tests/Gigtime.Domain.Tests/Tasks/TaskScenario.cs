@@ -24,7 +24,7 @@ internal sealed class TaskScenario
 		Catalogue.Send(new AddProject(Catalogue.ProjectId, Catalogue.ClientId, "site-audit", Rate: 120m));
 	}
 
-	public Decision Decide(TaskCommand command) => TaskDecider.Decide(Task, Tracker, Catalogue.State, command);
+	public Decision Decide(TaskCommand command) => TaskDecider.Decide(Task, Tracker, Catalogue.State, command, [Task]);
 
 	public void Send(TaskCommand command)
 	{
@@ -34,7 +34,7 @@ internal sealed class TaskScenario
 
 		foreach (var e in d.Events)
 		{
-			if (e is OpenTaskSet or OpenTaskCleared)
+			if (e is OpenTaskSet or OpenTaskCleared or TaskOpened or TaskClosed or TrackerAdvanced)
 			{
 				Tracker.Evolve(e);
 				TrackerEvents.Add(e);

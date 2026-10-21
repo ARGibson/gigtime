@@ -25,7 +25,7 @@ public static class VoidTaskEndpoint
 	public static EnvelopeResult? Validate([NotBody] LoadedCorrection loaded) => loaded.Refusal;
 
 	[WolverinePost("/v1/tasks/{id}/void")]
-	public static (Envelope<TaskDto>, AppendEvents) Handle(string id,
+	public static (Envelope<TaskDto>, AppendEvents, AppendEvents) Handle(string id,
 		VoidTaskRequest request,
 		[NotBody] LoadedCorrection loaded,
 		DateTimeOffset now)
@@ -33,6 +33,7 @@ public static class VoidTaskEndpoint
 		var task = TaskWrites.After(loaded.Loaded);
 
 		return (Envelopes.Success("void", TaskResponses.From(task, loaded.Loaded.Catalogue, now)),
-			Storage.AppendEvents(task.Id, loaded.Loaded.TaskVersion, TaskWrites.TaskEvents(loaded.Loaded)));
+			Storage.AppendEvents(task.Id, loaded.Loaded.TaskVersion, TaskWrites.TaskEvents(loaded.Loaded)),
+			TaskWrites.TrackerEvents(loaded.Loaded));
 	}
 }

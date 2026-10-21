@@ -100,13 +100,13 @@ public sealed class SubmissionTests
 		result.Events.Count.ShouldBe(3);
 		result.Events[0].ShouldBe(new TaskStopped(TaskScenario.At.AddSeconds(90)));
 		result.Events[1].ShouldBe(new TaskSubmitted(TaskScenario.At.AddSeconds(90), paused ? 60 : 120, "nearest-minute", 120m, "USD"));
-		result.Events[2].ShouldBeOfType<OpenTaskCleared>();
+		result.Events[2].ShouldBeOfType<TaskClosed>();
 		// The pure decision leaves both input documents untouched.
 		s.Task.State.ShouldBe(paused ? TaskState.Paused : TaskState.Running);
-		s.Tracker.TaskId.ShouldBe(s.Task.Id);
+		s.Tracker.TaskIds.ShouldContain(s.Task.Id);
 		s.Send(new StopTask(TaskScenario.At.AddSeconds(90), Submit: true));
 		s.Task.State.ShouldBe(TaskState.Submitted);
-		s.Tracker.TaskId.ShouldBeNull();
+		s.Tracker.TaskIds.ShouldBeEmpty();
 	}
 
 	[Theory]
@@ -257,6 +257,6 @@ public sealed class SubmissionTests
 		replay.Timeline.ShouldBe(s.Task.Timeline);
 		replay.StoppedAt.ShouldBe(s.Task.StoppedAt);
 		TaskFigures.Resolve(replay, s.Catalogue.State, TaskScenario.At.AddHours(1)).ShouldBe(s.Figures);
-		tracker.TaskId.ShouldBe(s.Tracker.TaskId);
+		tracker.TaskIds.ShouldBe(s.Tracker.TaskIds);
 	}
 }

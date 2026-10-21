@@ -40,7 +40,7 @@ public sealed class LifecycleTests
 		{
 			"start" or "add" => state == TaskState.Missing,
 			"pause" => state == TaskState.Running,
-			"resume" => state == TaskState.Paused,
+			"resume" => state is TaskState.Paused or TaskState.Stopped,
 			"stop" => state is TaskState.Running or TaskState.Paused,
 			"void" or "submit" => state == TaskState.Stopped,
 			"unsubmit" => state == TaskState.Submitted,
@@ -66,7 +66,7 @@ public sealed class LifecycleTests
 				(TaskState.Running or TaskState.Paused, "void" or "start" or "add") => "gig stop",
 				(TaskState.Paused, "pause") => "gig resume",
 				(TaskState.Stopped or TaskState.Voided, "start" or "add") => null,
-				(TaskState.Stopped, "pause" or "resume" or "stop") => "gig start",
+				(TaskState.Stopped, "pause" or "stop") => "gig resume " + s.Task.Id,
 				(TaskState.Voided, _) => "gig start",
 				_ => null
 			};
@@ -89,27 +89,28 @@ public sealed class LifecycleTests
 	}
 
 	[Fact]
-	public void Paused_task_keeps_the_open_slot_and_stop_releases_it()
+	public void Paused_task_remains_open_while_another_task_can_start_and_stop_removes_only_the_target()
 	{
 		var s = new TaskScenario();
 		s.Start();
 		s.Send(new PauseTask(TaskScenario.At.AddSeconds(20)));
 
-		s.Tracker.TaskId.ShouldBe(s.Task.Id);
+		s.Tracker.TaskIds.ShouldContain(s.Task.Id);
 
 		var another = new TaskView();
 
-		var refusal = TaskDecider.Decide(another,
+		var started = TaskDecider.Decide(another,
 			s.Tracker,
 			s.Catalogue.State,
-			new StartTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At));
+			new StartTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At),
+			[s.Task]);
 
-		refusal.Error!.Code.ShouldBe("invalid_transition");
-		refusal.Events.ShouldBeEmpty();
+		started.Error.ShouldBeNull();
+		started.Events.OfType<TaskOpened>().ShouldHaveSingleItem().TaskId.ShouldBe("123abc");
 
 		s.Send(new StopTask(TaskScenario.At.AddMinutes(1)));
 
-		s.Tracker.TaskId.ShouldBeNull();
+		s.Tracker.TaskIds.ShouldBeEmpty();
 		s.Task.RawSeconds.ShouldBe(20);
 		s.Task.StoppedAt.ShouldBe(TaskScenario.At.AddMinutes(1));
 
@@ -117,7 +118,8 @@ public sealed class LifecycleTests
 			.Decide(another,
 				s.Tracker,
 				s.Catalogue.State,
-				new StartTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At.AddMinutes(2)))
+				new StartTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At.AddMinutes(2)),
+				[])
 			.IsSuccess.ShouldBeTrue();
 	}
 
@@ -137,7 +139,7 @@ public sealed class LifecycleTests
 		s.Task.RawSeconds.ShouldBe(40);
 		s.Figures.RoundedSeconds.ShouldBe(60);
 		s.Task.State.ShouldBe(TaskState.Stopped);
-		s.Tracker.TaskId.ShouldBeNull();
+		s.Tracker.TaskIds.ShouldBeEmpty();
 	}
 
 	[Theory]
@@ -202,6 +204,6 @@ public sealed class LifecycleTests
 		task.StoppedAt.ShouldBe(s.Task.StoppedAt);
 		task.RawSeconds.ShouldBe(s.Task.RawSeconds);
 		TaskFigures.Resolve(task, s.Catalogue.State, TaskScenario.At).ShouldBe(s.Figures);
-		tracker.TaskId.ShouldBe(s.Tracker.TaskId);
+		tracker.TaskIds.ShouldBe(s.Tracker.TaskIds);
 	}
 }

@@ -150,7 +150,8 @@ public sealed class LocalTimeRenderingTests
 	{
 		var response = command switch
 		{
-			"status" => JsonSerializer.Serialize(Envelopes.Success(command, new StatusDto(tasks[0])), GigtimeJsonContext.Default.StatusResponse),
+			"status" => JsonSerializer.Serialize(Envelopes.Success(command, new StatusDto(tasks[0], [])),
+				GigtimeJsonContext.Default.StatusResponse),
 			"log" => JsonSerializer.Serialize(Envelopes.Success(command, new TasksDto(tasks)), GigtimeJsonContext.Default.TasksResponse),
 			_ => JsonSerializer.Serialize(Envelopes.Success(command, tasks[0]), GigtimeJsonContext.Default.TaskResponse),
 		};

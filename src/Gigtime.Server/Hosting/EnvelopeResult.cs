@@ -19,7 +19,11 @@ public sealed record EnvelopeResult(string Command, ErrorDto Error) : IResult
 	public static EnvelopeResult? From(Decision decision, string? taskId = null)
 	{
 		return decision.Error is { } error
-			? new(error.Command, new(error.Code, error.Message, new(taskId, error.State, error.Command), error.Hint))
+			? new(error.Command,
+				new(error.Code,
+					error.Message,
+					new(error.TaskId ?? (string.IsNullOrEmpty(taskId) ? null : taskId), error.State, error.Command, error.Tasks),
+					error.Hint))
 			: null;
 	}
 }

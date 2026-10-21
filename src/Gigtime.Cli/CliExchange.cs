@@ -15,7 +15,9 @@ internal sealed class CliExchange(
 	bool noColor,
 	Func<IPlatformPaths> paths,
 	Option<bool> json,
-	TimeProvider clock)
+	TimeProvider clock,
+	TextReader input,
+	bool canPrompt)
 {
 	internal Task<int> GetAsync<T>(ParseResult parsed,
 		string command,
@@ -45,9 +47,11 @@ internal sealed class CliExchange(
 		HttpContent? content,
 		JsonTypeInfo<Envelope<T>> responseType,
 		CancellationToken cancellationToken,
-		bool stream = false) where T : class
+		bool stream = false,
+		bool promptAllowed = true) where T : class
 	{
 		var asJson = parsed.GetValue(json);
+		var requestBody = content is null ? null : await content.ReadAsStringAsync(cancellationToken);
 
 		using var request = new HttpRequestMessage(method, "http://localhost" + path)
 		{
@@ -139,6 +143,38 @@ internal sealed class CliExchange(
 				return Fail(command, ErrorCodes.Internal, "The service returned an invalid envelope.", asJson);
 			}
 
+			if (!envelope.Ok && !asJson && canPrompt && promptAllowed
+					&& envelope.Error is { Code: ErrorCodes.InvalidTransition } refusal)
+			{
+				var retryPath = await CliPrompt.RetryPathAsync(command, path, refusal, input, error, cancellationToken);
+
+				if (retryPath is not null)
+				{
+					HttpContent? retryContent = null;
+
+					if (command == "start" && requestBody is not null)
+					{
+						var start = JsonSerializer.Deserialize(requestBody, GigtimeJsonContext.Default.StartTaskRequest)!;
+
+						retryContent = JsonContent.Create(start with
+						{
+							Switch = true,
+							SwitchFrom = refusal.State!.TaskId,
+						},
+							GigtimeJsonContext.Default.StartTaskRequest);
+					}
+
+					return await SendAsync(parsed,
+						command,
+						method,
+						retryPath,
+						retryContent,
+						responseType,
+						cancellationToken,
+						promptAllowed: false);
+				}
+			}
+
 			if (asJson)
 			{
 				output.Write(body);
@@ -147,6 +183,8 @@ internal sealed class CliExchange(
 			else if (envelope.Ok)
 			{
 				new HumanOutput(output, isTerminal, noColor, clock.GetUtcNow()).Write(envelope.Data!, envelope.Command);
+
+				foreach (var warning in envelope.Warnings ?? []) error.WriteLine(warning.Code + ": " + warning.Message);
 			}
 			else
 			{

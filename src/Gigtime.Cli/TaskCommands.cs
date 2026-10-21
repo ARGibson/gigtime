@@ -15,6 +15,7 @@ internal static class TaskCommands
 		Argument(start, "project");
 		Text(start, "ref");
 		Text(start, "rate");
+		Flag(start, "switch");
 
 		start.SetAction((r, ct) => exchange.WriteAsync(r,
 			"start",
@@ -23,7 +24,8 @@ internal static class TaskCommands
 			new StartTaskRequest(r.GetValue<string>("client")!,
 				r.GetValue<string>("project")!,
 				r.GetValue<string>("--ref"),
-				r.GetValue<string>("--rate")),
+				r.GetValue<string>("--rate"),
+				r.GetValue<bool>("--switch")),
 			GigtimeJsonContext.Default.StartTaskRequest,
 			GigtimeJsonContext.Default.TaskResponse,
 			ct));
@@ -31,12 +33,16 @@ internal static class TaskCommands
 		foreach (var name in new[] { "pause", "resume", "stop" })
 		{
 			var command = Add(root, name, char.ToUpperInvariant(name[0]) + name[1..] + " the open task.");
+			Argument(command, "task", true);
 			if (name == "stop") Flag(command, "submit");
+			if (name == "resume") Flag(command, "switch");
 
 			command.SetAction((r, ct) => exchange.SendAsync(r,
 				name,
 				HttpMethod.Post,
-				"/v1/tasks/" + name + (name == "stop" && r.GetValue<bool>("--submit") ? "?submit=true" : ""),
+				"/v1/tasks/" + name + Query(("task", r.GetValue<string>("task")),
+					("switch", name == "resume" && r.GetValue<bool>("--switch") ? "true" : null),
+					("submit", name == "stop" && r.GetValue<bool>("--submit") ? "true" : null)),
 				null,
 				GigtimeJsonContext.Default.TaskResponse,
 				ct));
@@ -61,7 +67,7 @@ internal static class TaskCommands
 				ct));
 		}
 
-		var status = Add(root, "status", "Show the open task and running totals, or none.");
+		var status = Add(root, "status", "Show the running task followed by paused tasks.");
 		status.SetAction((r, ct) => exchange.GetAsync(r, "status", "/v1/status", GigtimeJsonContext.Default.StatusResponse, ct));
 		var log = Add(root, "log", "Show recent tasks, newest first (default 10).");
 

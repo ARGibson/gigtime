@@ -37,10 +37,10 @@ namespace Internal.Generated.WolverineHandlers
             JasperFx.Events.Documents.IDocumentReadOperations documentReadOperations = documentSession;
             System.Diagnostics.Activity.Current?.SetTag("handler.type", "Gigtime.Server.Tasks.GetStatusEndpoint");
             var dateTimeOffset = _timeProvider.GetUtcNow();
-            var loadedTaskRead = await Gigtime.Server.Tasks.GetStatusEndpoint.LoadAsync(documentReadOperations, httpContext.RequestAborted).ConfigureAwait(false);
+            var loadedStatus = await Gigtime.Server.Tasks.GetStatusEndpoint.LoadAsync(documentReadOperations, httpContext.RequestAborted).ConfigureAwait(false);
             
             // The actual HTTP request handler execution
-            var envelopeOfStatusDto_response = Gigtime.Server.Tasks.GetStatusEndpoint.Handle(loadedTaskRead, dateTimeOffset, _platformPaths);
+            var envelopeOfStatusDto_response = Gigtime.Server.Tasks.GetStatusEndpoint.Handle(loadedStatus, dateTimeOffset, _platformPaths);
 
             // Writing the response body to JSON because this was the first 'return variable' in the method signature
             await WriteJsonAsync(httpContext, envelopeOfStatusDto_response, 404);

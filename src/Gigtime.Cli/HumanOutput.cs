@@ -73,14 +73,13 @@ internal sealed class HumanOutput
 				if (command == "stop" && task.Submission is null) console.WriteLine("Submit the rounded figure.");
 
 				break;
-			case StatusDto { Task: { } task }:
-				Task(task);
+			case StatusDto status:
+				if (status.Running is null && status.Paused.Count == 0) console.WriteLine("none");
+				if (status.Running is { } running) Task(running);
+				foreach (var paused in status.Paused) Task(paused);
 
 				break;
-			case StatusDto:
-				console.WriteLine("none");
 
-				break;
 			case TasksDto tasks:
 				Log(tasks.Tasks);
 

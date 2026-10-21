@@ -31,3 +31,7 @@ public sealed record TaskSubmitted(DateTimeOffset At, long RoundedSeconds, strin
 public sealed record TaskUnsubmitted(DateTimeOffset At);
 
 public sealed record TaskRateSet(decimal? Rate, string? Currency);
+
+public sealed record TaskReopened(DateTimeOffset At);
+
+public sealed record IntervalAdded(int Interval, DateTimeOffset Start, DateTimeOffset End);

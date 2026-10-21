@@ -14,6 +14,15 @@ public static class CorrectionWrites
 		CancellationToken cancellationToken)
 	{
 		context.Items["command"] = command;
+		var trackerStream = await events.FetchForWriting<OpenTask>(OpenTask.StreamId, cancellationToken);
+		var tracker = trackerStream.Aggregate ?? new OpenTask();
+		var open = new List<TaskView>();
+
+		foreach (var openId in tracker.TaskIds)
+		{
+			if (await events.FetchLatest<TaskView>(openId, cancellationToken) is { } view) open.Add(view);
+		}
+
 		var catalogue = (await events.FetchLatest<CatalogueView>(CatalogueView.StreamId, cancellationToken))!;
 
 		if (id is null)
@@ -35,16 +44,18 @@ public static class CorrectionWrites
 
 		var loaded = new LoadedTaskCommand(catalogue,
 			task,
-			new(),
+			tracker,
 			stream.StartingVersion ?? 0,
-			0,
+			trackerStream.StartingVersion ?? 0,
 			requested.Commands.Count == 0 ? new ChangeTaskRef(null) : requested.Commands[0],
 			decision,
-			context.TraceIdentifier);
+			context.TraceIdentifier,
+			open);
 
 		if (requested.Error is { } error) return new(loaded, new(command, error));
 
 		var changes = new List<object>();
+		var warnings = new List<DecisionWarning>();
 
 		foreach (var next in requested.Commands)
 		{
@@ -54,16 +65,18 @@ public static class CorrectionWrites
 			}),
 				loaded.Tracker,
 				catalogue,
-				next);
+				next,
+				open);
 
 			if (decision.Error is not null) return new(loaded, EnvelopeResult.From(decision, id));
 
 			changes.AddRange(decision.Events);
+			if (decision.Warnings is { } notices) warnings.AddRange(notices);
 		}
 
 		return new(loaded with
 		{
-			Decision = Decision.Accept(changes.ToArray())
+			Decision = new Decision(changes, Warnings: warnings)
 		},
 			null);
 	}

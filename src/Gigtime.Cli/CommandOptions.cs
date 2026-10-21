@@ -14,18 +14,30 @@ internal static class CommandOptions
 
 	internal static void Argument(Command command, string name, bool optional = false)
 	{
-		command.Arguments.Add(new Argument<string?>(name)
+		var argument = new Argument<string?>(name)
 		{
 			Arity = optional ? ArgumentArity.ZeroOrOne : ArgumentArity.ExactlyOne,
 			Description = name switch
 			{
 				"key" => "Supply the " + command.Parents.Single().Name + " key.",
 				"task" => "Select a task by id.",
+				"target" => "Select a task id or supply a client key.",
 				"kind" => "Select clients, projects or tasks.",
 				"prefix" => "Filter by key or task id prefix.",
 				_ => "Supply the " + name + " key.",
 			},
-		});
+		};
+
+		if (name is "task" or "target")
+		{
+			argument.Validators.Add(result =>
+			{
+				if (result.Tokens.Any(token => token.Value.StartsWith('-')))
+					result.AddError("Task ids cannot start with '-'.");
+			});
+		}
+
+		command.Arguments.Add(argument);
 	}
 
 	internal static void Text(Command command, string name, bool required = false)
@@ -73,6 +85,7 @@ internal static class CommandOptions
 			{
 				"all" => "Include archived or voided entries.",
 				"submit" => "Submit the task when stopping.",
+				"switch" => "Pause the running task and run this task.",
 				"week" => "Report this week.",
 				"month" => "Report this month.",
 				"check" => "Inspect setup and health without changes.",

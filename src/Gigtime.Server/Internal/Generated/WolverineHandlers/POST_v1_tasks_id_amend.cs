@@ -56,13 +56,20 @@ namespace Internal.Generated.WolverineHandlers
 
             
             // The actual HTTP request handler execution
-            (var envelopeOfTaskDto_response, var appendEvents) = Gigtime.Server.Tasks.AmendTaskEndpoint.Handle(id, request, loadedCorrection, dateTimeOffset);
+            (var envelopeOfTaskDto_response, var appendEvents, var appendEvents2) = Gigtime.Server.Tasks.AmendTaskEndpoint.Handle(id, request, loadedCorrection, dateTimeOffset);
 
             if (appendEvents != null)
             {
                 
                 // Append events through the registered event store
                 appendEvents.Execute(eventOperations);
+            }
+
+            if (appendEvents2 != null)
+            {
+                
+                // Append events through the registered event store
+                appendEvents2.Execute(eventOperations);
             }
 
             

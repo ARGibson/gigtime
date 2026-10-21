@@ -13,12 +13,12 @@ public sealed class LifecycleTests
 	{
 		await using var app = await ServiceHost.StartAsync();
 		await app.CreateProjectAsync();
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task.ShouldBeNull();
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running.ShouldBeNull();
 		var started = (await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("example", "project", "reference"))).Data!;
 		started.StartedAt.ShouldBe(app.Clock.Now);
 		started.State.ShouldBe("running");
 		app.Clock.Now = app.Clock.Now.AddSeconds(40);
-		var status = (await app.GetAsync<StatusDto>("/v1/status")).Data!.Task!;
+		var status = (await app.GetAsync<StatusDto>("/v1/status")).Data!.Running!;
 		status.RawSeconds.ShouldBe(40);
 		(await app.PostAsync<TaskDto>("/v1/tasks/pause")).Data!.State.ShouldBe("paused");
 		(await app.PostAsync<TaskDto>("/v1/tasks/pause", status: 409)).Error!.Code.ShouldBe("invalid_transition");
@@ -32,7 +32,7 @@ public sealed class LifecycleTests
 		stopped.Submission.ShouldBeNull();
 		stopped.Rate.ShouldBeNull();
 		stopped.Intervals.Select(i => i.Number).ShouldBe([1, 2]);
-		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Task.ShouldBeNull();
+		(await app.GetAsync<StatusDto>("/v1/status")).Data!.Running.ShouldBeNull();
 		var submitted = (await app.PostAsync<TaskDto>($"/v1/tasks/{started.Id}/submit")).Data!;
 		submitted.Submission!.Rate!.Amount.ShouldBe("12.50");
 		await app.PatchAsync<ProjectDto>("/v1/clients/example/projects/project", new ChangeProjectRequest(Rate: "99"));
@@ -52,7 +52,7 @@ public sealed class LifecycleTests
 		(await app.GetAsync<TaskDto>("/v1/tasks/aaaaaa", 404)).Error!.Code.ShouldBe("not_found");
 
 		foreach (var verb in new[] { "pause", "resume", "stop" })
-			(await app.PostAsync<TaskDto>($"/v1/tasks/{verb}", status: 404)).Error!.Code.ShouldBe("not_found");
+			(await app.PostAsync<TaskDto>($"/v1/tasks/{verb}", status: 409)).Error!.Code.ShouldBe("invalid_transition");
 
 		(await app.PostAsync<TaskDto>("/v1/tasks/start", new StartTaskRequest("absent", "absent"), 404)).Error!.Code.ShouldBe("not_found");
 		await app.CreateProjectAsync();

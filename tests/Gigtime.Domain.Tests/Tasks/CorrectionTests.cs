@@ -48,17 +48,18 @@ public sealed class CorrectionTests
 		var result = TaskDecider.Decide(recorded,
 			s.Tracker,
 			s.Catalogue.State,
-			new RecordTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At.AddHours(-1), TaskScenario.At));
+			new RecordTask("123abc", s.Catalogue.ProjectId, null, TaskScenario.At.AddHours(-1), TaskScenario.At),
+			[s.Task]);
 
 		result.IsSuccess.ShouldBeTrue();
-		result.Events.Count.ShouldBe(1);
+		result.Events.Count.ShouldBe(2);
 
-		recorded.Evolve(result.Events.Single());
+		recorded.Evolve(result.Events.OfType<TaskRecorded>().Single());
 
 		recorded.State.ShouldBe(TaskState.Stopped);
 		recorded.RawSeconds.ShouldBe(3600);
 		TaskFigures.Resolve(recorded, s.Catalogue.State, TaskScenario.At).Rate.ShouldBe(120m);
-		s.Tracker.TaskId.ShouldBe(s.Task.Id);
+		s.Tracker.TaskIds.ShouldContain(s.Task.Id);
 	}
 
 	[Theory]

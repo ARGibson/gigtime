@@ -30,4 +30,6 @@ namespace Gigtime.Contracts;
 [JsonSerializable(typeof(RecordTaskInput))]
 [JsonSerializable(typeof(AmendTaskInput))]
 [JsonSerializable(typeof(VoidTaskRequest))]
+[JsonSerializable(typeof(AddIntervalInput))]
+[JsonSerializable(typeof(WarningDto))]
 public partial class GigtimeJsonContext : JsonSerializerContext;

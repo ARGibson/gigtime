@@ -61,9 +61,6 @@ public sealed class SubmissionCliTests
 	[InlineData("start example work --rate")]
 	[InlineData("add example work --from 09:00 --to 10:00 --rate")]
 	[InlineData("amend 01JTASK --rate 42 --clear-rate")]
-	[InlineData("stop 01JTASK")]
-	[InlineData("pause 01JTASK")]
-	[InlineData("resume 01JTASK")]
 	public async Task Invalid_submission_arguments_refuse_before_resolving_paths(string command)
 	{
 		var app = new CliApplication(TextWriter.Null,
