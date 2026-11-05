@@ -464,14 +464,20 @@ The bar shows unrounded time, so it can differ from the rounded figure in
 `gig status` by up to 30 seconds.
 
 Add this to herdr's `config.toml`, replacing the script path with the absolute path
-to your checkout:
+to your checkout. If the file already has a `[ui]` table, add `tab_bar_right` to that
+table instead of adding a second `[ui]` header:
 
 ```toml
 [ui]
 tab_bar_right = [{ type = "command", command = "/path/to/gigtime/integrations/herdr/gig-tab-status", interval_seconds = 1, timeout_seconds = 2 }]
 ```
 
-The script needs Python 3. It finds `gig` on `PATH`, then in `~/.local/bin`, and
+Herdr runs the command through a shell, so quote a path containing spaces, for example
+`command = "'/path with spaces/gigtime/integrations/herdr/gig-tab-status'"`.
+Run `herdr server reload-config` after saving; a running session otherwise keeps
+its old configuration.
+
+The script needs Python 3. It finds `gig` in absolute `PATH` entries, then in `~/.local/bin`, and
 passes through `GIGTIME_INSTANCE`. The entry is also empty if `gig` fails; run the
 script by hand to see the error on stderr. The release archive doesn't include the
 script, so keep the checkout at the configured path.

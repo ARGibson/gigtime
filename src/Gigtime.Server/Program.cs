@@ -23,6 +23,9 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 	ContentRootPath = AppContext.BaseDirectory,
 });
 
+// #33: frequent status polling must not produce per-request ASP.NET information logs.
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+
 builder.Host.ApplyJasperFxExtensions();
 
 // #28: explicit codegen commands still write into the project, not the runtime content root.

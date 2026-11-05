@@ -15,6 +15,42 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 		.Single(a => a.Key == "RepositoryRoot").Value!, "integrations/herdr/gig-tab-status"));
 
 	[Fact]
+	public async Task Repeated_status_reads_do_not_emit_ASP_NET_request_logs()
+	{
+		await using var day = new DaySession(published);
+		day.Environment["Logging__LogLevel__Microsoft.AspNetCore"] = "Information";
+		await day.StartAsync();
+		for (var i = 0; i < 20; i++) await day.SuccessAsync("status");
+		var logs = await day.StopAsync();
+		logs.ShouldNotContain("Microsoft.AspNetCore");
+	}
+
+	[Fact]
+	public async Task A_failing_command_still_emits_its_error_log()
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		await day.CatalogueAsync();
+		var database = (await day.SuccessAsync("setup", "--check")).GetProperty("database_path").GetString()!;
+
+		// #33: break only this sandbox's projection table to exercise the real exception logger.
+		var broken = await CommandProcess.RunAsync("python3",
+			[
+				"-I",
+				"-c",
+				"import sqlite3, sys\nwith sqlite3.connect(sys.argv[1]) as db:\n\tdb.execute('DROP TABLE fi_doc_catalogueview')",
+				database,
+			],
+			day.Root, day.Environment, TimeSpan.FromSeconds(5));
+
+		broken.ExitCode.ShouldBe(0, broken.Error);
+		await day.RefusalAsync(1, "internal", "status");
+		var logs = await day.StopAsync();
+		logs.ShouldContain("Command request failed with internal");
+		logs.ShouldContain("fail: Gigtime.Server.Hosting.CommandExceptions");
+	}
+
+	[Fact]
 	public async Task Real_status_shows_running_or_most_recently_paused_and_clears_when_stopped()
 	{
 		await using var day = new DaySession(published);
@@ -64,6 +100,76 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 	{
 		await using var day = new DaySession(published);
 		day.Environment["PATH"] = published.Application + Path.PathSeparator + day.Environment["PATH"];
+		var failed = await day.GigAsync("status", "--json");
+		failed.ExitCode.ShouldNotBe(0);
+		using var envelope = JsonDocument.Parse(failed.Output);
+		var message = envelope.RootElement.GetProperty("error").GetProperty("message").GetString();
+		var result = await RunAsync(day);
+		AssertFailure(result);
+		result.Error.ShouldBe("gig-tab-status: " + message + "\n");
+	}
+
+	[Theory]
+	[InlineData(0)]
+	[InlineData(7)]
+	public async Task Failure_envelope_message_is_preserved_on_one_line(int exitCode)
+	{
+		await using var day = new DaySession(published);
+		var bin = IsolatedPath(day);
+		var envelope = JsonSerializer.Serialize(new { ok = false, error = new { message = "service unavailable\ntry again" } });
+
+		await WriteExecutableAsync(Path.Combine(bin, "gig"),
+			"printf '%s' '" + envelope + "'\nexit " + exitCode);
+
+		var result = await RunAsync(day);
+		AssertFailure(result);
+		result.Error.ShouldBe("gig-tab-status: service unavailable try again\n");
+	}
+
+	[Fact]
+	public async Task Subprocess_timeout_returns_before_the_test_deadline()
+	{
+		await using var day = new DaySession(published);
+		var bin = IsolatedPath(day);
+		await WriteExecutableAsync(Path.Combine(bin, "gig"), "exec /bin/sleep 60");
+		var elapsed = Stopwatch.StartNew();
+		var result = await RunAsync(day);
+		elapsed.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(4));
+		AssertFailure(result);
+	}
+
+	[Theory]
+	[InlineData(".")]
+	[InlineData("")]
+	[InlineData("relative")]
+	public async Task Relative_PATH_entries_cannot_select_a_planted_gig(string entry)
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		await day.CatalogueAsync();
+		await day.SuccessAsync("start", "acme", "work");
+		var plantedDirectory = Path.Combine(day.Root, entry);
+		Directory.CreateDirectory(plantedDirectory);
+		var marker = Path.Combine(day.Root, "planted-gig-ran");
+		await WriteExecutableAsync(Path.Combine(plantedDirectory, "gig"), "printf planted > '" + marker + "'");
+		day.Environment["PATH"] = entry + Path.PathSeparator + published.Application + Path.PathSeparator + day.Environment["PATH"];
+		await AssertLineAsync(day, @"acme/work \d{2,}:\d{2}:\d{2}\n");
+		File.Exists(marker).ShouldBeFalse();
+	}
+
+	[Theory]
+	[InlineData(false, 42)]
+	[InlineData(false, "")]
+	[InlineData(false, "acme\u0080")]
+	[InlineData(true, 42)]
+	[InlineData(true, "")]
+	[InlineData(true, "work\u0085")]
+	public async Task Non_string_empty_and_control_keys_are_unusable(bool project, object key)
+	{
+		await using var day = new DaySession(published);
+		var bin = IsolatedPath(day);
+		var body = project ? PrintStatus("acme", project: key) : PrintStatus(key);
+		await WriteExecutableAsync(Path.Combine(bin, "gig"), body);
 		AssertFailure(await RunAsync(day));
 	}
 
@@ -162,7 +268,7 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":null,\"paused\":[{}]}}'")]
 	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":null,\"paused\":{}}}'")]
 	[InlineData("printf '%s' 'null'")]
-	[InlineData("exec /bin/sleep 3")]
+	[InlineData("exec /usr/bin/python3 -I -c 'print(\"[\" * 2000 + \"]\" * 2000)'")]
 	public async Task Failed_or_unusable_status_has_no_stdout_and_no_traceback(string body)
 	{
 		await using var day = new DaySession(published);
@@ -241,7 +347,7 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 		result.ExitCode.ShouldNotBe(0);
 		result.Output.ShouldBeEmpty();
 		result.Error.ShouldEndWith("\n");
-		result.Error.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length.ShouldBe(1);
+		result.Error.Split('\n').Length.ShouldBe(2);
 		result.Error.ShouldStartWith("gig-tab-status: ");
 		result.Error.ShouldNotContain("Traceback");
 	}
@@ -256,12 +362,12 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 		return bin;
 	}
 
-	private static string PrintStatus(string client, string? seconds = "445506", bool paused = false)
+	private static string PrintStatus(object client, string? seconds = "445506", bool paused = false, object? project = null)
 	{
 		var task = new Dictionary<string, object>
 		{
 			["client"] = new { key = client },
-			["project"] = new { key = "work" },
+			["project"] = new { key = project ?? "work" },
 			["display"] = "01:02:00",
 		};
 

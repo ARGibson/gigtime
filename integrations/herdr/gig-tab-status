@@ -10,7 +10,7 @@ import sys
 def task_line(task):
 	client = task["client"]["key"]
 	project = task["project"]["key"]
-	if not all(isinstance(value, str) and value and not any(ord(c) < 32 or ord(c) == 127 for c in value)
+	if not all(isinstance(value, str) and value and value.isprintable()
 		for value in (client, project)):
 		raise ValueError("invalid task fields")
 	seconds = task["raw_seconds"]
@@ -24,7 +24,7 @@ def task_line(task):
 
 def format_status(envelope):
 	if envelope["ok"] is not True:
-		raise ValueError("status was not successful")
+		raise ValueError(failure_message(envelope) or "status was not successful")
 	data = envelope["data"]
 	running = data["running"]
 	paused = data["paused"]
@@ -40,9 +40,20 @@ def format_status(envelope):
 	return ""
 
 
+def failure_message(envelope):
+	if isinstance(envelope, dict):
+		error = envelope.get("error")
+		if isinstance(error, dict):
+			message = error.get("message")
+			if isinstance(message, str) and message.strip():
+				return message
+	return ""
+
+
 def main():
 	try:
-		gig = shutil.which("gig")
+		path = os.pathsep.join(entry for entry in os.get_exec_path() if os.path.isabs(entry))
+		gig = shutil.which("gig", path=path)
 		if gig is None:
 			fallback = Path.home() / ".local/bin/gig"
 			if fallback.is_file() and os.access(fallback, os.X_OK):
@@ -50,14 +61,20 @@ def main():
 		if gig is None:
 			raise ValueError("gig was not found on PATH or in ~/.local/bin")
 		result = subprocess.run([gig, "status", "--json"], capture_output=True, text=True, timeout=1.5, check=False)
+		try:
+			envelope = json.loads(result.stdout)
+		except (ValueError, RuntimeError):
+			if result.returncode != 0:
+				raise ValueError(result.stderr.strip() or f"gig status exited with code {result.returncode}") from None
+			raise
 		if result.returncode != 0:
-			raise ValueError(f"gig status exited with code {result.returncode}")
-		line = format_status(json.loads(result.stdout))
+			raise ValueError(failure_message(envelope) or result.stderr.strip() or f"gig status exited with code {result.returncode}")
+		line = format_status(envelope)
 		if line:
 			print(line)
 		return 0
 	# #33: herdr clears failed entries; a manual invocation still explains the failure.
-	except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+	except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.TimeoutExpired) as error:
 		message = " ".join(str(error).splitlines())
 		print(f"gig-tab-status: {message}", file=sys.stderr)
 		return 1
