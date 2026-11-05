@@ -453,6 +453,29 @@ and recent task ids. Hidden `gig __complete clients [prefix]`, `gig __complete p
 They print nothing on service failure and bound network work to 100 ms. No shell code
 comes from the service. Completion is read-only.
 
+## herdr tab bar
+
+The checkout's `integrations/herdr/gig-tab-status` script shows the current task in
+herdr's tab bar. A running task shows `acme/work 01:23:45`, refreshed each second.
+With nothing running, the most recently paused task shows `acme/work paused 01:23:45`;
+other paused tasks add a count, such as `acme/work paused 01:23:45 +2`. A running task
+takes precedence over paused tasks. With nothing open, the entry is empty.
+The bar shows unrounded time, so it can differ from the rounded figure in
+`gig status` by up to 30 seconds.
+
+Add this to herdr's `config.toml`, replacing the script path with the absolute path
+to your checkout:
+
+```toml
+[ui]
+tab_bar_right = [{ type = "command", command = "/path/to/gigtime/integrations/herdr/gig-tab-status", interval_seconds = 1, timeout_seconds = 2 }]
+```
+
+The script needs Python 3. It finds `gig` on `PATH`, then in `~/.local/bin`, and
+passes through `GIGTIME_INSTANCE`. The entry is also empty if `gig` fails; run the
+script by hand to see the error on stderr. The release archive doesn't include the
+script, so keep the checkout at the configured path.
+
 ## Verification
 
 ```sh

@@ -1,0 +1,67 @@
+#!/usr/bin/env -S python3 -I
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+
+
+def task_line(task):
+	client = task["client"]["key"]
+	project = task["project"]["key"]
+	if not all(isinstance(value, str) and value and not any(ord(c) < 32 or ord(c) == 127 for c in value)
+		for value in (client, project)):
+		raise ValueError("invalid task fields")
+	seconds = task["raw_seconds"]
+	if type(seconds) is not int or seconds < 0:
+		raise ValueError("invalid raw_seconds")
+	hours, remainder = divmod(seconds, 3600)
+	minutes, seconds = divmod(remainder, 60)
+	display = f"{hours:02}:{minutes:02}:{seconds:02}"
+	return f"{client}/{project}", display
+
+
+def format_status(envelope):
+	if envelope["ok"] is not True:
+		raise ValueError("status was not successful")
+	data = envelope["data"]
+	running = data["running"]
+	paused = data["paused"]
+	if not isinstance(paused, list):
+		raise ValueError("invalid paused list")
+	if running is not None:
+		key, display = task_line(running)
+		return f"{key} {display}"
+	if paused:
+		key, display = task_line(paused[0])
+		others = f" +{len(paused) - 1}" if len(paused) > 1 else ""
+		return f"{key} paused {display}{others}"
+	return ""
+
+
+def main():
+	try:
+		gig = shutil.which("gig")
+		if gig is None:
+			fallback = Path.home() / ".local/bin/gig"
+			if fallback.is_file() and os.access(fallback, os.X_OK):
+				gig = str(fallback)
+		if gig is None:
+			raise ValueError("gig was not found on PATH or in ~/.local/bin")
+		result = subprocess.run([gig, "status", "--json"], capture_output=True, text=True, timeout=1.5, check=False)
+		if result.returncode != 0:
+			raise ValueError(f"gig status exited with code {result.returncode}")
+		line = format_status(json.loads(result.stdout))
+		if line:
+			print(line)
+		return 0
+	# #33: herdr clears failed entries; a manual invocation still explains the failure.
+	except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
+		message = " ".join(str(error).splitlines())
+		print(f"gig-tab-status: {message}", file=sys.stderr)
+		return 1
+
+
+if __name__ == "__main__":
+	sys.exit(main())
