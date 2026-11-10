@@ -85,6 +85,12 @@ internal sealed class DaySession : IAsyncDisposable
 
 	internal async Task RestartAsync()
 	{
+		await StopAsync();
+		await StartAsync();
+	}
+
+	internal async Task<string> StopAsync()
+	{
 		// #5: restart like a service manager; a forced kill bypasses Unix listener cleanup.
 		var signal = await CommandProcess.RunAsync("/bin/kill",
 			["-TERM", server!.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)],
@@ -96,9 +102,11 @@ internal sealed class DaySession : IAsyncDisposable
 		using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
 		await server.WaitForExitAsync(deadline.Token);
 		await Task.WhenAll(serverOutput!, serverError!);
+		var logs = await serverOutput! + await serverError!;
 		server.Dispose();
 		server = null;
-		await StartAsync();
+
+		return logs;
 	}
 
 	internal Task<CommandResult> GigAsync(params string[] arguments) => CommandProcess.RunAsync(
