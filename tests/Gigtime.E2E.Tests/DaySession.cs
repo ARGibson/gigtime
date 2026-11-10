@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using Shouldly;
@@ -10,6 +11,8 @@ internal sealed class DaySession : IAsyncDisposable
 	private Task<string>? serverOutput;
 	private Task<string>? serverError;
 	private readonly PublishedFixture published;
+	private readonly ConcurrentQueue<string> logLines = new();
+	internal string Logs => string.Concat(logLines);
 	internal string Root { get; } = Path.Combine(Path.GetTempPath(), "gig-day-" + Guid.NewGuid().ToString("N"));
 	internal int ServerProcessId => server!.Id;
 	internal Dictionary<string, string> Environment { get; } = new(StringComparer.Ordinal);
@@ -67,8 +70,8 @@ internal sealed class DaySession : IAsyncDisposable
 		start.Environment.Remove("LISTEN_PID");
 		start.Environment.Remove("LISTEN_FDS");
 		server = Process.Start(start)!;
-		serverOutput = server.StandardOutput.ReadToEndAsync();
-		serverError = server.StandardError.ReadToEndAsync();
+		serverOutput = ReadLogAsync(server.StandardOutput);
+		serverError = ReadLogAsync(server.StandardError);
 		var elapsed = Stopwatch.StartNew();
 
 		while (elapsed.Elapsed < TimeSpan.FromSeconds(30))
@@ -107,6 +110,15 @@ internal sealed class DaySession : IAsyncDisposable
 		server = null;
 
 		return logs;
+	}
+
+	internal async Task CrashAsync()
+	{
+		server!.Kill(true);
+		await server.WaitForExitAsync();
+		await Task.WhenAll(serverOutput!, serverError!);
+		server.Dispose();
+		server = null;
 	}
 
 	internal Task<CommandResult> GigAsync(params string[] arguments) => CommandProcess.RunAsync(
@@ -170,4 +182,17 @@ internal sealed class DaySession : IAsyncDisposable
 
 		Directory.Delete(Root, true);
 	}
+	private async Task<string> ReadLogAsync(StreamReader reader)
+	{
+		var lines = new List<string>();
+
+		while (await reader.ReadLineAsync() is { } line)
+		{
+			lines.Add(line + "\n");
+			logLines.Enqueue(line + "\n");
+		}
+
+		return string.Concat(lines);
+	}
+
 }
