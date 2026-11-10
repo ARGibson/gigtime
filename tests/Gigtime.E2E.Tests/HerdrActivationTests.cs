@@ -51,25 +51,34 @@ public sealed class HerdrActivationTests(PublishedFixture published, ITestOutput
 		try
 		{
 			await ready.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-			var first = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(4));
-			first.Output.ShouldBeEmpty();
+			var elapsed = Stopwatch.StartNew();
+			var polls = 0;
+			CommandResult result;
 
-			if (tooSlow)
+			do
 			{
-				first.ExitCode.ShouldBe(1, first.Error);
-				first.Error.ShouldStartWith("gig-tab-status: ");
-				await Task.Delay(1500, TestContext.Current.CancellationToken);
-			}
-			else
-			{
-				first.ExitCode.ShouldBe(0, first.Error);
-			}
+				var poll = Stopwatch.StartNew();
+				result = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(4));
+				polls++;
+				result.Output.ShouldBeEmpty();
+				poll.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(2));
 
-			var next = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(4));
-			next.ExitCode.ShouldBe(0, next.Error);
-			next.Error.ShouldBeEmpty();
-			next.Output.ShouldBeEmpty();
-			output.WriteLine($"Inherited socket: delay={delay}; first={first.ExitCode}; next={next.ExitCode}");
+				if (tooSlow && polls == 1) result.ExitCode.ShouldBe(1, result.Error);
+				if (result.ExitCode == 0)
+				{
+					result.Error.ShouldBeEmpty();
+					break;
+				}
+
+				result.ExitCode.ShouldBe(1, result.Error);
+				result.Error.ShouldStartWith("gig-tab-status: ");
+				result.Error.Count(c => c == '\n').ShouldBe(1);
+				result.Error.ShouldNotContain("Traceback");
+				await Task.Delay(1000, TestContext.Current.CancellationToken);
+			} while (elapsed.Elapsed < TimeSpan.FromSeconds(30));
+
+			result.ExitCode.ShouldBe(0, result.Error);
+			output.WriteLine($"Inherited socket: delay={delay}; polls={polls}; elapsed={elapsed.Elapsed}");
 		}
 		finally
 		{

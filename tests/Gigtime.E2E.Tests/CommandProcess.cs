@@ -18,6 +18,8 @@ internal static class CommandProcess
 		};
 
 		start.Environment.Remove("GIGTIME_INSTANCE");
+		// #33: an omitted runtime root must stay unset rather than inherit the live socket root.
+		start.Environment.Remove("XDG_RUNTIME_DIR");
 		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		foreach (var (key, value) in environment) start.Environment[key] = value;
 		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");

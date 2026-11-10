@@ -22,7 +22,7 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 			day.Root, day.Environment, TimeSpan.FromSeconds(60));
 		output.WriteLine(result.Output + result.Error);
 		result.ExitCode.ShouldBe(0, result.Output + result.Error);
-		result.Error.ShouldContain("Ran 15 tests");
+		result.Error.ShouldContain("Ran 17 tests");
 	}
 
 	[Theory]
@@ -37,7 +37,8 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 		day.Environment["GIGTIME_INSTANCE"] = instance;
 		day.Environment["USER"] = "spoofed";
 		day.Environment["LOGNAME"] = "spoofed";
-		if (runtime != "absolute") day.Environment["XDG_RUNTIME_DIR"] = runtime == "unset" ? "" : runtime;
+		if (runtime == "unset") day.Environment.Remove("XDG_RUNTIME_DIR");
+		else if (runtime != "absolute") day.Environment["XDG_RUNTIME_DIR"] = runtime;
 		// #33: probe the read-only platform resolver before any daemon can create its fallback.
 		var setup = await day.GigAsync("setup", "--check", "--json");
 		using var json = JsonDocument.Parse(setup.Output);

@@ -65,6 +65,8 @@ internal sealed class DaySession : IAsyncDisposable
 
 		foreach (var argument in arguments) start.ArgumentList.Add(argument);
 		start.Environment.Remove("GIGTIME_INSTANCE");
+		// #33: preserve true-unset runtime tests without inheriting the live socket root.
+		start.Environment.Remove("XDG_RUNTIME_DIR");
 		foreach (var (key, value) in Environment) start.Environment[key] = value;
 		start.Environment.Remove("DBUS_SESSION_BUS_ADDRESS");
 		start.Environment.Remove("LISTEN_PID");

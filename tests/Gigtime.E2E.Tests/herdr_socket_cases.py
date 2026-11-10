@@ -1,10 +1,12 @@
 """Protocol cases driven through the executable; every socket lives in a private root."""
 import contextlib
 import json
+import io
 import os
 from pathlib import Path
 import pwd
 import runpy
+import signal
 import socket
 import stat
 import subprocess
@@ -190,6 +192,48 @@ class SocketCases(unittest.TestCase):
 			with self.subTest(case=index), self.peer(response):
 				self.failure(self.invoke())
 
+	def test_valid_envelope_with_truncated_content_length_is_rejected(self):
+		body = json.dumps(status()).encode()
+		with self.peer(b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body) + 10).encode() + b"\r\n\r\n" + body):
+			result = self.invoke()
+			self.failure(result)
+			self.assertEqual("gig-tab-status: incomplete status response\n", result.stderr)
+
+	def test_alarm_at_cleanup_boundary_still_closes_and_restores(self):
+		module = runpy.run_path(str(SCRIPT))
+		for boundary in ("ignore", "cancel"):
+			with self.subTest(boundary=boundary):
+				response = mock.Mock(status=200, length=0)
+				response.getheader.return_value = "identity"
+				response.headers.defects = []
+				response.headers.get_all.return_value = []
+				response.read.return_value = b""
+				connection = mock.Mock()
+				connection.getresponse.return_value = response
+				previous = object()
+
+				def handler(sig, value):
+					if boundary == "ignore" and value == signal.SIG_IGN:
+						raise TimeoutError("status deadline exceeded")
+					return previous
+
+				def timer(which, value):
+					if boundary == "cancel" and value == 0:
+						raise TimeoutError("status deadline exceeded")
+
+				with mock.patch.dict(module["read_status"].__globals__, UnixStatusConnection=mock.Mock(return_value=connection)), \
+					mock.patch("signal.signal", side_effect=handler) as signals, \
+					mock.patch("signal.setitimer", side_effect=timer), \
+					mock.patch("json.loads", return_value=status()):
+					with mock.patch.dict(module["main"].__globals__, socket_path=lambda: ("unused", None)), \
+						contextlib.redirect_stdout(io.StringIO()) as stdout, contextlib.redirect_stderr(io.StringIO()) as stderr:
+						self.assertEqual(1, module["main"]())
+					self.assertEqual("", stdout.getvalue())
+					self.assertEqual("gig-tab-status: status deadline exceeded\n", stderr.getvalue())
+					response.close.assert_called_once()
+					connection.close.assert_called_once()
+					self.assertEqual(mock.call(signal.SIGALRM, previous), signals.call_args)
+
 	def test_cap_applies_to_all_body_framings(self):
 		# A valid JSON envelope beyond the cap must fail even with unknown length.
 		item = status()
@@ -221,7 +265,8 @@ class SocketCases(unittest.TestCase):
 				result = self.invoke(timeout=3.5)
 				elapsed = time.monotonic() - start
 				self.failure(result)
-				self.assertLess(elapsed, 2.2)
+				self.assertLess(elapsed, 2.0)
+				print(f"deadline {mode}: {elapsed:.3f}s", file=sys.stderr)
 				self.assertGreater(elapsed, 1.3)
 
 	def test_format_boundaries_and_invalid_fields(self):
@@ -349,12 +394,24 @@ class SocketCases(unittest.TestCase):
 		self.assertTrue(self.path.is_symlink())
 
 	def test_missing_refused_and_invalid_instance_do_not_repair(self):
-		self.failure(self.invoke())
+		result = self.invoke()
+		self.failure(result)
+		self.assertIn(f"gig-tab-status: Cannot reach gigtimed at {self.path}: ", result.stderr)
+		self.assertIn("No such file or directory", result.stderr)
 		with socket.socket(socket.AF_UNIX) as listener:
 			listener.bind(str(self.path))
-		self.failure(self.invoke())
+		result = self.invoke()
+		self.failure(result)
+		self.assertIn(f"gig-tab-status: Cannot reach gigtimed at {self.path}: ", result.stderr)
+		self.assertIn("Connection refused", result.stderr)
 		self.assertTrue(self.path.exists())
 		self.path.unlink()
+		module = runpy.run_path(str(SCRIPT))
+		with mock.patch.dict(os.environ, self.env, clear=True), \
+			mock.patch("socket.socket") as sockets, contextlib.redirect_stderr(io.StringIO()) as stderr:
+			sockets.return_value.connect.side_effect = PermissionError("permission denied")
+			self.assertEqual(1, module["main"]())
+		self.assertEqual(f"gig-tab-status: Cannot reach gigtimed at {self.path}: permission denied\n", stderr.getvalue())
 		for name in ("../dev", "DEV", "a\n", "-dev", "a" * 33):
 			self.env["GIGTIME_INSTANCE"] = name
 			with self.subTest(name=name), self.peer(framed(status())) as requests:
