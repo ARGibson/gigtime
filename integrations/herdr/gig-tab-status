@@ -11,6 +11,18 @@ import sys
 import time
 
 
+MAX_BODY_BYTES = 1048576
+MAX_CHUNK_LINE_BYTES = 65536
+MAX_TRAILER_FIELDS = 100
+HTTP_TOKEN = rb"[!#$%&'*+.^_\x60|~0-9A-Za-z-]+"
+QUOTED_STRING = rb'"(?:[\t !#-\[\]-~\x80-\xff]|\\[\t -~\x80-\xff])*"'
+CHUNK_SIZE_LINE = re.compile(
+	rb"([0-9A-Fa-f]+)(?:[ \t]*;[ \t]*" + HTTP_TOKEN
+	+ rb"(?:[ \t]*=[ \t]*(?:" + HTTP_TOKEN + rb"|" + QUOTED_STRING + rb"))?)*\r\n"
+)
+TRAILER_LINE = re.compile(HTTP_TOKEN + rb":[\t -~\x80-\xff]*\r\n")
+
+
 def task_line(task):
 	client = task["client"]["key"]
 	project = task["project"]["key"]
@@ -94,6 +106,48 @@ def deadline_expired(signum, frame):
 	raise TimeoutError("status deadline exceeded")
 
 
+def read_chunked_body(stream):
+	# #33: http.client accepts corrupt chunk delimiters and EOF in place of the final blank line.
+	body = bytearray()
+	while True:
+		line = stream.readline(MAX_CHUNK_LINE_BYTES + 1)
+		size_line = CHUNK_SIZE_LINE.fullmatch(line) if len(line) <= MAX_CHUNK_LINE_BYTES else None
+		if size_line is None:
+			raise http.client.HTTPException()
+		size = int(size_line[1], 16)
+		if size == 0:
+			break
+		if size > MAX_BODY_BYTES - len(body):
+			raise ValueError("status response exceeds 1 MiB")
+		chunk = stream.read(size)
+		if len(chunk) != size or stream.read(2) != b"\r\n":
+			raise http.client.HTTPException()
+		body.extend(chunk)
+
+	for _ in range(MAX_TRAILER_FIELDS + 1):
+		line = stream.readline(MAX_CHUNK_LINE_BYTES + 1)
+		if line == b"\r\n":
+			return body
+		if len(line) > MAX_CHUNK_LINE_BYTES or TRAILER_LINE.fullmatch(line) is None:
+			raise http.client.HTTPException()
+	raise http.client.HTTPException()
+
+
+def read_body(response):
+	remaining = response.length
+	body = bytearray()
+	while True:
+		part = response.read(min(65536, MAX_BODY_BYTES + 1 - len(body)))
+		if not part:
+			break
+		body.extend(part)
+		if len(body) > MAX_BODY_BYTES:
+			raise ValueError("status response exceeds 1 MiB")
+	if remaining is not None and len(body) != remaining:
+		raise ValueError("incomplete status response")
+	return body
+
+
 def read_status(path, instance):
 	deadline = time.monotonic() + 1.5
 	connection = UnixStatusConnection(path, deadline)
@@ -112,17 +166,7 @@ def read_status(path, instance):
 			raise ValueError("invalid status response headers")
 		if transfers and (len(transfers) != 1 or transfers[0].lower() != "chunked" or lengths):
 			raise ValueError("unsupported status response framing")
-		remaining = response.length
-		body = bytearray()
-		while True:
-			part = response.read(min(65536, 1048577 - len(body)))
-			if not part:
-				break
-			body.extend(part)
-			if len(body) > 1048576:
-				raise ValueError("status response exceeds 1 MiB")
-		if remaining is not None and len(body) != remaining:
-			raise ValueError("incomplete status response")
+		body = read_chunked_body(response.fp) if transfers else read_body(response)
 		try:
 			envelope = json.loads(body)
 		except (ValueError, UnicodeError):

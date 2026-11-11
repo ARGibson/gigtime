@@ -45,9 +45,9 @@ class SocketCases(unittest.TestCase):
 		self.addCleanup(self.root_context.cleanup)
 		self.root = Path(self.root_context.name)
 		self.env = dict(os.environ)
-		for key in ("GIGTIME_INSTANCE", "LISTEN_PID", "LISTEN_FDS", "DBUS_SESSION_BUS_ADDRESS"):
+		for key in ("GIGTIME_INSTANCE", "LISTEN_PID", "LISTEN_FDS", "LISTEN_FDNAMES", "DBUS_SESSION_BUS_ADDRESS"):
 			self.env.pop(key, None)
-		for key in ("HOME", "TMPDIR", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR"):
+		for key in ("HOME", "TMPDIR", "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_RUNTIME_DIR", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
 			path = self.root / key
 			path.mkdir()
 			self.env[key] = str(path)
@@ -95,9 +95,11 @@ class SocketCases(unittest.TestCase):
 					requests.append(request)
 					if mode == "silent":
 						stop.wait(5)
-					elif mode in ("headers", "body"):
+					elif mode in ("headers", "body", "chunked body"):
 						if mode == "body":
 							client.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 999\r\n\r\n")
+						elif mode == "chunked body":
+							client.sendall(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n100\r\n")
 						for byte in (b"HTTP/1.1 200 OK\r\nX-Drip: " + b"x" * 100):
 							client.sendall(bytes([byte]))
 							if stop.wait(0.1):
@@ -199,6 +201,39 @@ class SocketCases(unittest.TestCase):
 			self.failure(result)
 			self.assertEqual("gig-tab-status: incomplete status response\n", result.stderr)
 
+	def test_malformed_chunk_boundaries_are_rejected_even_with_valid_json(self):
+		body = json.dumps(status()).encode()
+		head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+		size = f"{len(body):x}".encode()
+		for name, chunks in (
+			("corrupt data delimiter", size + b"\r\n" + body + b"XX0\r\n\r\n"),
+			("missing final line", size + b"\r\n" + body + b"\r\n0\r\n"),
+			("missing line after trailer", size + b"\r\n" + body + b"\r\n0\r\nX-Check: ok\r\n"),
+			("bare LF on size", size + b"\n" + body + b"\r\n0\r\n\r\n"),
+			("bare LF on final line", size + b"\r\n" + body + b"\r\n0\r\n\n"),
+			("signed chunk size", b"+" + size + b"\r\n" + body + b"\r\n0\r\n\r\n"),
+			("unclosed extension quote", size + b';tag="bad\r\n' + body + b"\r\n0\r\n\r\n"),
+			("invalid trailer", size + b"\r\n" + body + b"\r\n0\r\nmissing-colon\r\n\r\n"),
+			("too many trailers", size + b"\r\n" + body + b"\r\n0\r\n" + b"X-Check: ok\r\n" * 101 + b"\r\n"),
+		):
+			with self.subTest(case=name), self.peer(head + chunks):
+				result = self.invoke()
+				self.failure(result)
+				self.assertEqual("gig-tab-status: invalid HTTP status response\n", result.stderr)
+
+	def test_chunk_extensions_and_trailers_are_ignored_after_validation(self):
+		body = json.dumps(status()).encode()
+		response = (
+			b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+			+ f"{len(body):X}".encode() + b' ; flag; tag = "a;\\"b"; x=value\r\n'
+			+ body + b"\r\n00;last=yes\r\nX-Check: ok\r\nX-Empty:\r\n\r\n"
+		)
+		with self.peer(response):
+			result = self.invoke()
+			self.assertEqual(0, result.returncode, result.stderr)
+			self.assertEqual("acme/work 01:01:01\n", result.stdout)
+			self.assertEqual("", result.stderr)
+
 	def test_alarm_at_cleanup_boundary_still_closes_and_restores(self):
 		module = runpy.run_path(str(SCRIPT))
 		for boundary in ("ignore", "cancel"):
@@ -259,7 +294,7 @@ class SocketCases(unittest.TestCase):
 			self.assertEqual("gig-tab-status: status JSON is nested too deeply\n", result.stderr)
 
 	def test_silent_headers_and_body_drips_have_one_total_deadline(self):
-		for mode in ("silent", "headers", "body"):
+		for mode in ("silent", "headers", "body", "chunked body"):
 			with self.subTest(mode=mode), self.peer(mode=mode):
 				start = time.monotonic()
 				result = self.invoke(timeout=3.5)

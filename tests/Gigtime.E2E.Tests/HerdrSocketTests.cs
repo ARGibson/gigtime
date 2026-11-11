@@ -22,7 +22,46 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 			day.Root, day.Environment, TimeSpan.FromSeconds(60));
 		output.WriteLine(result.Output + result.Error);
 		result.ExitCode.ShouldBe(0, result.Output + result.Error);
-		result.Error.ShouldContain("Ran 17 tests");
+		result.Error.ShouldContain("Ran 19 tests");
+	}
+
+	[Fact]
+	public async Task Child_launchers_use_only_explicit_roots_and_activation_settings()
+	{
+		await using var day = new DaySession(published);
+		var keys = new[]
+		{
+			"XDG_RUNTIME_DIR", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME",
+			"HOME", "TMPDIR", "GIGTIME_INSTANCE", "LISTEN_FDS", "LISTEN_PID", "LISTEN_FDNAMES",
+		};
+		var inherited = keys.ToDictionary(key => key, Environment.GetEnvironmentVariable);
+
+		try
+		{
+			foreach (var key in keys) Environment.SetEnvironmentVariable(key, Path.Combine(day.Root, "inherited", key));
+
+			var command = await CommandProcess.RunAsync("/usr/bin/env", [], day.Root,
+				new Dictionary<string, string>(), TimeSpan.FromSeconds(5));
+			command.ExitCode.ShouldBe(0, command.Error);
+			var commandVariables = command.Output.Split('\n');
+
+			var captured = Path.Combine(day.Root, "daemon-environment");
+			await day.StartAsync("/bin/sh", day.Root, "-c", "/usr/bin/env > \"$1\" && exec \"$2\"",
+				"daemon-probe", captured, Path.Combine(published.Application, "gigtimed"));
+			var daemonVariables = await File.ReadAllLinesAsync(captured, TestContext.Current.CancellationToken);
+
+			foreach (var key in keys)
+			{
+				commandVariables.ShouldNotContain(line => line.StartsWith(key + "=", StringComparison.Ordinal));
+				var matches = daemonVariables.Where(line => line.StartsWith(key + "=", StringComparison.Ordinal)).ToArray();
+				if (day.Environment.TryGetValue(key, out var value)) matches.ShouldBe([key + "=" + value]);
+				else matches.ShouldBeEmpty();
+			}
+		}
+		finally
+		{
+			foreach (var (key, value) in inherited) Environment.SetEnvironmentVariable(key, value);
+		}
 	}
 
 	[Theory]
