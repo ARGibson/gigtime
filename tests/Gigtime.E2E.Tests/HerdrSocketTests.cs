@@ -22,11 +22,11 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 			day.Root, day.Environment, TimeSpan.FromSeconds(60));
 		output.WriteLine(result.Output + result.Error);
 		result.ExitCode.ShouldBe(0, result.Output + result.Error);
-		result.Error.ShouldContain("Ran 19 tests");
+		result.Error.ShouldContain("Ran 21 tests");
 	}
 
 	[Fact]
-	public async Task Child_launchers_use_only_explicit_roots_and_activation_settings()
+	public async Task Child_launchers_resolve_private_defaults_and_keep_explicit_roots()
 	{
 		await using var day = new DaySession(published);
 		var keys = new[]
@@ -40,28 +40,71 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 		{
 			foreach (var key in keys) Environment.SetEnvironmentVariable(key, Path.Combine(day.Root, "inherited", key));
 
-			var command = await CommandProcess.RunAsync("/usr/bin/env", [], day.Root,
+			var command = await CommandProcess.RunAsync("/bin/sh",
+				[
+					"-c", """
+						/usr/bin/env
+						printf 'RUNTIME_MODE=%s\n' "$(stat -c %a "$XDG_RUNTIME_DIR")"
+						"$1" setup --check --json
+						XDG_DATA_HOME= exec "$1" setup --check --json
+						""",
+					"command-probe", Path.Combine(published.Application, "gig"),
+				], day.Root,
 				new Dictionary<string, string>(), TimeSpan.FromSeconds(5));
-			command.ExitCode.ShouldBe(0, command.Error);
-			var commandVariables = command.Output.Split('\n');
+			command.ExitCode.ShouldBe(6, command.Error);
+			var lines = command.Output.TrimEnd('\n').Split('\n');
+			var commandVariables = lines[..^2];
+			var launchRoot = Path.GetDirectoryName(Variable(commandVariables, "TMPDIR"))! + "/";
+			Variable(commandVariables, "RUNTIME_MODE").ShouldBe("700");
+			Directory.Exists(launchRoot).ShouldBeFalse();
+
+			using var setup = JsonDocument.Parse(lines[^2]);
+			using var homeFallback = JsonDocument.Parse(lines[^1]);
+			var paths = setup.RootElement.GetProperty("data");
+			var resolved = new[]
+			{
+				paths.GetProperty("database_path").GetString()!,
+				paths.GetProperty("service_unit").GetString()!,
+				paths.GetProperty("socket_path").GetString()!,
+				homeFallback.RootElement.GetProperty("data").GetProperty("database_path").GetString()!,
+			};
+			foreach (var path in resolved)
+			{
+				path.ShouldStartWith(launchRoot);
+				foreach (var key in keys[..6])
+				{
+					if (inherited[key] is { Length: > 0 } parentRoot)
+						path.ShouldNotStartWith(Path.TrimEndingDirectorySeparator(parentRoot) + "/");
+				}
+			}
+
+			foreach (var key in keys[..7]) Variable(commandVariables, key).ShouldStartWith(launchRoot);
 
 			var captured = Path.Combine(day.Root, "daemon-environment");
 			await day.StartAsync("/bin/sh", day.Root, "-c", "/usr/bin/env > \"$1\" && exec \"$2\"",
 				"daemon-probe", captured, Path.Combine(published.Application, "gigtimed"));
 			var daemonVariables = await File.ReadAllLinesAsync(captured, TestContext.Current.CancellationToken);
 
-			foreach (var key in keys)
+			foreach (var key in keys[..7])
+			{
+				var value = Variable(daemonVariables, key);
+				if (day.Environment.TryGetValue(key, out var explicitRoot)) value.ShouldBe(explicitRoot);
+				else value.ShouldStartWith(day.Root + "/");
+			}
+
+			foreach (var key in keys[7..])
 			{
 				commandVariables.ShouldNotContain(line => line.StartsWith(key + "=", StringComparison.Ordinal));
-				var matches = daemonVariables.Where(line => line.StartsWith(key + "=", StringComparison.Ordinal)).ToArray();
-				if (day.Environment.TryGetValue(key, out var value)) matches.ShouldBe([key + "=" + value]);
-				else matches.ShouldBeEmpty();
+				daemonVariables.ShouldNotContain(line => line.StartsWith(key + "=", StringComparison.Ordinal));
 			}
 		}
 		finally
 		{
 			foreach (var (key, value) in inherited) Environment.SetEnvironmentVariable(key, value);
 		}
+
+		static string Variable(string[] variables, string key) =>
+			variables.Single(line => line.StartsWith(key + "=", StringComparison.Ordinal))[(key.Length + 1)..];
 	}
 
 	[Theory]
@@ -76,7 +119,7 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 		day.Environment["GIGTIME_INSTANCE"] = instance;
 		day.Environment["USER"] = "spoofed";
 		day.Environment["LOGNAME"] = "spoofed";
-		if (runtime == "unset") day.Environment.Remove("XDG_RUNTIME_DIR");
+		if (runtime == "unset") day.OmittedVariable = "XDG_RUNTIME_DIR";
 		else if (runtime != "absolute") day.Environment["XDG_RUNTIME_DIR"] = runtime;
 		// #33: probe the read-only platform resolver before any daemon can create its fallback.
 		var setup = await day.GigAsync("setup", "--check", "--json");
@@ -84,14 +127,14 @@ public sealed class HerdrSocketTests(PublishedFixture published, ITestOutputHelp
 		var expected = json.RootElement.GetProperty("data").GetProperty("socket_path").GetString();
 		var resolved = await CommandProcess.RunAsync("python3",
 			["-I", "-c", "import runpy,sys; print(runpy.run_path(sys.argv[1])['socket_path']()[0])", script],
-			day.Root, day.Environment, TimeSpan.FromSeconds(5));
+			day.Root, day.Environment, TimeSpan.FromSeconds(5), day.OmittedVariable);
 		resolved.ExitCode.ShouldBe(0, resolved.Error);
 		resolved.Output.TrimEnd().ShouldBe(expected);
 		Directory.Exists(Path.GetDirectoryName(expected)).ShouldBeFalse();
 		await day.StartAsync();
 		await day.CatalogueAsync();
 		await day.SuccessAsync("start", "acme", "work");
-		var line = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(4));
+		var line = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(4), day.OmittedVariable);
 		line.ExitCode.ShouldBe(0, line.Error);
 		line.Output.ShouldMatch(@"\Aacme/work \d{2,}:\d{2}:\d{2}\n\z");
 	}

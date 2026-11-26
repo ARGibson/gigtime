@@ -108,6 +108,8 @@ class SocketCases(unittest.TestCase):
 						# Multiple writes exercise parser reads independently of packet boundaries.
 						for offset in range(0, len(response), 8192):
 							client.sendall(response[offset:offset+8192])
+						if mode == "hold open":
+							stop.wait(5)
 			except (BrokenPipeError, ConnectionResetError):
 				pass
 			except Exception as error:
@@ -233,6 +235,24 @@ class SocketCases(unittest.TestCase):
 			self.assertEqual(0, result.returncode, result.stderr)
 			self.assertEqual("acme/work 01:01:01\n", result.stdout)
 			self.assertEqual("", result.stderr)
+
+	def test_overlong_chunk_size_fails_before_waiting_for_a_newline(self):
+		self.assert_overlong_chunk_line(b"1;" + b"x" * 65535)
+
+	def test_overlong_trailer_fails_before_waiting_for_a_newline(self):
+		self.assert_overlong_chunk_line(b"0\r\nX-Check: " + b"x" * 65536)
+
+	def assert_overlong_chunk_line(self, chunks):
+		head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+		with self.peer(head + chunks, mode="hold open"):
+			start = time.monotonic()
+			result = self.invoke()
+			elapsed = time.monotonic() - start
+			print(f"overlong chunk framing: {elapsed:.3f}s", file=sys.stderr)
+			self.failure(result)
+			self.assertEqual("gig-tab-status: invalid HTTP status response\n", result.stderr)
+			# Allow for interpreter startup and scheduling while staying below the 1.5s alarm.
+			self.assertLess(elapsed, 1.2)
 
 	def test_alarm_at_cleanup_boundary_still_closes_and_restores(self):
 		module = runpy.run_path(str(SCRIPT))

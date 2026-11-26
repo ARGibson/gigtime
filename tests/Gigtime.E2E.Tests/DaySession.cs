@@ -16,6 +16,7 @@ internal sealed class DaySession : IAsyncDisposable
 	internal string Root { get; } = Path.Combine(Path.GetTempPath(), "gig-day-" + Guid.NewGuid().ToString("N"));
 	internal int ServerProcessId => server!.Id;
 	internal Dictionary<string, string> Environment { get; } = new(StringComparer.Ordinal);
+	internal string? OmittedVariable { get; set; }
 
 	internal DaySession(PublishedFixture published)
 	{
@@ -56,7 +57,8 @@ internal sealed class DaySession : IAsyncDisposable
 
 	internal async Task StartAsync(string executable, string workingDirectory, params string[] arguments)
 	{
-		var start = CommandProcess.StartInfo(executable, arguments, workingDirectory, Environment);
+		var launchRoot = Path.Combine(Root, $"daemon-launch-{Guid.NewGuid():N}");
+		var start = CommandProcess.StartInfo(executable, arguments, workingDirectory, Environment, launchRoot, OmittedVariable);
 		server = Process.Start(start)!;
 		serverOutput = ReadLogAsync(server.StandardOutput);
 		serverError = ReadLogAsync(server.StandardError);
@@ -114,7 +116,8 @@ internal sealed class DaySession : IAsyncDisposable
 		arguments,
 		Root,
 		Environment,
-		TimeSpan.FromSeconds(20));
+		TimeSpan.FromSeconds(20),
+		OmittedVariable);
 
 	internal async Task<CommandResult> HumanAsync(params string[] arguments)
 	{
