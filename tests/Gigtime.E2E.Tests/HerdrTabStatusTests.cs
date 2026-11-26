@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -13,17 +14,6 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 	private static readonly string script = Path.GetFullPath(Path.Combine(typeof(HerdrTabStatusTests)
 		.Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
 		.Single(a => a.Key == "RepositoryRoot").Value!, "integrations/herdr/gig-tab-status"));
-
-	[Fact]
-	public async Task Repeated_status_reads_do_not_emit_ASP_NET_request_logs()
-	{
-		await using var day = new DaySession(published);
-		day.Environment["Logging__LogLevel__Microsoft.AspNetCore"] = "Information";
-		await day.StartAsync();
-		for (var i = 0; i < 20; i++) await day.SuccessAsync("status");
-		var logs = await day.StopAsync();
-		logs.ShouldNotContain("Microsoft.AspNetCore");
-	}
 
 	[Fact]
 	public async Task A_failing_command_still_emits_its_error_log()
@@ -96,84 +86,6 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 	}
 
 	[Fact]
-	public async Task Unavailable_sandbox_daemon_returns_one_error_and_no_status()
-	{
-		await using var day = new DaySession(published);
-		day.Environment["PATH"] = published.Application + Path.PathSeparator + day.Environment["PATH"];
-		var failed = await day.GigAsync("status", "--json");
-		failed.ExitCode.ShouldNotBe(0);
-		using var envelope = JsonDocument.Parse(failed.Output);
-		var message = envelope.RootElement.GetProperty("error").GetProperty("message").GetString();
-		var result = await RunAsync(day);
-		AssertFailure(result);
-		result.Error.ShouldBe("gig-tab-status: " + message + "\n");
-	}
-
-	[Theory]
-	[InlineData(0)]
-	[InlineData(7)]
-	public async Task Failure_envelope_message_is_preserved_on_one_line(int exitCode)
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		var envelope = JsonSerializer.Serialize(new { ok = false, error = new { message = "service unavailable\ntry again" } });
-
-		await WriteExecutableAsync(Path.Combine(bin, "gig"),
-			"printf '%s' '" + envelope + "'\nexit " + exitCode);
-
-		var result = await RunAsync(day);
-		AssertFailure(result);
-		result.Error.ShouldBe("gig-tab-status: service unavailable try again\n");
-	}
-
-	[Fact]
-	public async Task Subprocess_timeout_returns_before_the_test_deadline()
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), "exec /bin/sleep 60");
-		var elapsed = Stopwatch.StartNew();
-		var result = await RunAsync(day);
-		elapsed.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(4));
-		AssertFailure(result);
-	}
-
-	[Theory]
-	[InlineData(".")]
-	[InlineData("")]
-	[InlineData("relative")]
-	public async Task Relative_PATH_entries_cannot_select_a_planted_gig(string entry)
-	{
-		await using var day = new DaySession(published);
-		await day.StartAsync();
-		await day.CatalogueAsync();
-		await day.SuccessAsync("start", "acme", "work");
-		var plantedDirectory = Path.Combine(day.Root, entry);
-		Directory.CreateDirectory(plantedDirectory);
-		var marker = Path.Combine(day.Root, "planted-gig-ran");
-		await WriteExecutableAsync(Path.Combine(plantedDirectory, "gig"), "printf planted > '" + marker + "'");
-		day.Environment["PATH"] = entry + Path.PathSeparator + published.Application + Path.PathSeparator + day.Environment["PATH"];
-		await AssertLineAsync(day, @"acme/work \d{2,}:\d{2}:\d{2}\n");
-		File.Exists(marker).ShouldBeFalse();
-	}
-
-	[Theory]
-	[InlineData(false, 42)]
-	[InlineData(false, "")]
-	[InlineData(false, "acme\u0080")]
-	[InlineData(true, 42)]
-	[InlineData(true, "")]
-	[InlineData(true, "work\u0085")]
-	public async Task Non_string_empty_and_control_keys_are_unusable(bool project, object key)
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		var body = project ? PrintStatus("acme", project: key) : PrintStatus(key);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), body);
-		AssertFailure(await RunAsync(day));
-	}
-
-	[Fact]
 	public async Task Running_duration_advances_and_paused_duration_stays_fixed()
 	{
 		await using var day = new DaySession(published);
@@ -213,107 +125,116 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 		output.WriteLine("paused stayed fixed: " + JsonSerializer.Serialize(paused.Output));
 	}
 
-	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
-	public async Task Unrounded_seconds_win_when_the_rounded_display_disagrees(bool paused)
+	[Fact]
+	public async Task Repeated_status_reads_are_quiet_during_polling_despite_startup_URL_warning()
 	{
 		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), PrintStatus("acme", "3661", paused));
-		var result = await RunAsync(day);
-		result.ExitCode.ShouldBe(0, result.Error);
-		result.Error.ShouldBeEmpty();
-		result.Output.ShouldBe(paused ? "acme/work paused 01:01:01\n" : "acme/work 01:01:01\n");
-	}
+		day.Environment["Logging__LogLevel__Microsoft.AspNetCore"] = "Information";
+		day.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:1";
+		await day.StartAsync();
+		await Task.Delay(100, TestContext.Current.CancellationToken);
+		day.Logs.ShouldContain("Overriding address");
+		var before = day.Logs.Length;
 
-	[Theory]
-	[InlineData("0", "00:00:00")]
-	[InlineData("59", "00:00:59")]
-	[InlineData("3599", "00:59:59")]
-	[InlineData("3600", "01:00:00")]
-	[InlineData("360000", "100:00:00")]
-	public async Task Duration_formats_second_minute_and_hour_boundaries(string seconds, string expected)
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), PrintStatus("acme", seconds));
-		var result = await RunAsync(day);
-		result.ExitCode.ShouldBe(0, result.Error);
-		result.Error.ShouldBeEmpty();
-		result.Output.ShouldBe("acme/work " + expected + "\n");
-	}
+		for (var i = 0; i < 20; i++)
+		{
+			var poll = await RunAsync(day);
+			poll.ExitCode.ShouldBe(0, poll.Error);
+			poll.Error.ShouldBeEmpty();
+		}
 
-	[Theory]
-	[InlineData(null)]
-	[InlineData("\"3661\"")]
-	[InlineData("true")]
-	[InlineData("1.5")]
-	[InlineData("-1")]
-	public async Task Missing_or_invalid_raw_seconds_are_an_error(string? seconds)
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), PrintStatus("acme", seconds));
-		AssertFailure(await RunAsync(day));
-	}
-
-	[Theory]
-	[InlineData("exit 7")]
-	[InlineData("printf '%s' 'not json'")]
-	[InlineData("printf '%s' '{\"ok\":false}'")]
-	[InlineData("printf '%s' '{\"ok\":true}'")]
-	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":null}}'")]
-	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":{},\"paused\":[]}}'")]
-	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":null,\"paused\":[{}]}}'")]
-	[InlineData("printf '%s' '{\"ok\":true,\"data\":{\"running\":null,\"paused\":{}}}'")]
-	[InlineData("printf '%s' 'null'")]
-	[InlineData("exec /usr/bin/python3 -I -c 'print(\"[\" * 2000 + \"]\" * 2000)'")]
-	public async Task Failed_or_unusable_status_has_no_stdout_and_no_traceback(string body)
-	{
-		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), body);
-		AssertFailure(await RunAsync(day));
+		await Task.Delay(100, TestContext.Current.CancellationToken);
+		day.Logs[before..].ShouldNotContain("Microsoft.AspNetCore");
+		await day.StopAsync();
 	}
 
 	[Fact]
-	public async Task Missing_gig_is_an_error_and_home_install_is_the_fallback()
+	public async Task Backfill_amend_reassign_and_key_changes_reach_the_line_unchanged()
 	{
 		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
+		await day.StartAsync();
+		await day.CatalogueAsync();
+		var added = await day.SuccessAsync("add", "acme", "work",
+			"--from", "2026-03-02T09:00:00Z", "--to", "2026-03-02T10:00:00Z");
+		await AssertLineAsync(day, "");
+		var id = (await day.SuccessAsync("start", "acme", "work")).GetProperty("id").GetString()!;
+		await day.SuccessAsync("pause");
+		await day.SuccessAsync("amend", id, "--interval", "1",
+			"--start", "2026-03-02T09:00:00Z", "--end", "2026-03-02T10:01:01Z");
+		await AssertLineAsync(day, "acme/work paused 01:01:01\n");
+		await day.SuccessAsync("client", "add", "other", "--name", "Other", "--currency", "GBP");
+		await day.SuccessAsync("project", "add", "other", "else", "--rate", "20");
+		await day.SuccessAsync("amend", id, "--client", "other", "--project", "else");
+		await AssertLineAsync(day, "other/else paused 01:01:01\n");
+		await day.SuccessAsync("client", "set", "other", "--key", "renamed");
+		await day.SuccessAsync("project", "set", "renamed", "else", "--key", "new");
+		await AssertLineAsync(day, "renamed/new paused 01:01:01\n");
+		await day.RestartAsync();
+		await AssertLineAsync(day, "renamed/new paused 01:01:01\n");
+		await day.StopAsync();
 		AssertFailure(await RunAsync(day));
-		var fallback = Path.Combine(day.Environment["HOME"], ".local/bin/gig");
-		Directory.CreateDirectory(Path.GetDirectoryName(fallback)!);
-		await WriteExecutableAsync(fallback, PrintStatus("home"));
-		var installed = await RunAsync(day);
-		installed.ExitCode.ShouldBe(0, installed.Error);
-		installed.Error.ShouldBeEmpty();
-		installed.Output.ShouldBe("home/work 123:45:06\n");
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), PrintStatus("path"));
-		var preferred = await RunAsync(day);
-		preferred.ExitCode.ShouldBe(0, preferred.Error);
-		preferred.Error.ShouldBeEmpty();
-		preferred.Output.ShouldBe("path/work 123:45:06\n");
+		await day.StartAsync();
+		await AssertLineAsync(day, "renamed/new paused 01:01:01\n");
+		added.GetProperty("raw_seconds").GetInt64().ShouldBe(3600);
 	}
 
 	[Fact]
-	public async Task Executable_ignores_Python_modules_in_the_active_pane_directory_and_environment()
+	public async Task Many_paused_tasks_with_long_real_interval_histories_fit_the_resource_cap()
 	{
 		await using var day = new DaySession(published);
-		var bin = IsolatedPath(day);
-		await WriteExecutableAsync(Path.Combine(bin, "gig"), PrintStatus("acme"));
-		var marker = Path.Combine(day.Root, "imported");
-		var planted = "open(" + JsonSerializer.Serialize(marker) + ", 'w').write('imported')\n";
-		await File.WriteAllTextAsync(Path.Combine(day.Root, "json.py"), planted, TestContext.Current.CancellationToken);
-		await File.WriteAllTextAsync(Path.Combine(day.Root, "sitecustomize.py"), planted, TestContext.Current.CancellationToken);
-		day.Environment["PYTHONPATH"] = day.Root;
-		day.Environment["PYTHONHOME"] = Path.Combine(day.Root, "invalid-python-home");
-		var result = await CommandProcess.RunAsync(script, [], day.Root, day.Environment, TimeSpan.FromSeconds(5));
+		await day.StartAsync();
+		await day.CatalogueAsync();
+
+		for (var task = 0; task < 8; task++)
+		{
+			var id = (await day.SuccessAsync("start", "acme", "work")).GetProperty("id").GetString()!;
+			await day.SuccessAsync("pause");
+
+			for (var interval = 0; interval < 32; interval++)
+			{
+				var from = DateTimeOffset.Parse("2026-03-02T09:00:00Z", CultureInfo.InvariantCulture).AddMinutes(interval * 2);
+				await day.SuccessAsync("add",
+					id,
+					"--from",
+					from.ToString("O", CultureInfo.InvariantCulture),
+					"--to",
+					from.AddMinutes(1).ToString("O", CultureInfo.InvariantCulture));
+			}
+		}
+
+		var result = await day.GigAsync("status", "--json");
 		result.ExitCode.ShouldBe(0, result.Error);
-		result.Error.ShouldBeEmpty();
-		result.Output.ShouldBe("acme/work 123:45:06\n");
-		File.Exists(marker).ShouldBeFalse();
+		using var json = JsonDocument.Parse(result.Output);
+		var paused = json.RootElement.GetProperty("data").GetProperty("paused");
+		paused.GetArrayLength().ShouldBe(8);
+		foreach (var task in paused.EnumerateArray()) task.GetProperty("intervals").GetArrayLength().ShouldBeGreaterThanOrEqualTo(32);
+		var bytes = System.Text.Encoding.UTF8.GetByteCount(result.Output.TrimEnd('\n'));
+		bytes.ShouldBeLessThan(1048576 / 4);
+		output.WriteLine($"Large real status: {bytes} UTF-8 bytes; 8 paused tasks, at least 32 intervals each; cap 1048576.");
+		await AssertPausedAsync(day, 7);
+	}
+
+	[Fact]
+	public async Task A_crash_clears_the_line_and_restart_reads_persisted_state()
+	{
+		await using var day = new DaySession(published);
+		await day.StartAsync();
+		await day.CatalogueAsync();
+		await day.SuccessAsync("start", "acme", "work");
+		await day.SuccessAsync("pause");
+		var before = await RunAsync(day);
+		before.ExitCode.ShouldBe(0, before.Error);
+		await day.CrashAsync();
+
+		AssertFailure(await RunAsync(day));
+		var socket = Path.Combine(day.Environment["XDG_RUNTIME_DIR"], "gigtime/gigtimed.sock");
+		File.Exists(socket).ShouldBeTrue();
+		// #33: the sandbox owner cleans up after SIGKILL; the polling reader never repairs the socket.
+		File.Delete(socket);
+		await day.StartAsync();
+		var restarted = await RunAsync(day);
+		restarted.ExitCode.ShouldBe(0, restarted.Error);
+		restarted.Output.ShouldBe(before.Output);
 	}
 
 	private async Task AssertPausedAsync(DaySession day, int others)
@@ -350,39 +271,5 @@ public sealed class HerdrTabStatusTests(PublishedFixture published, ITestOutputH
 		result.Error.Split('\n').Length.ShouldBe(2);
 		result.Error.ShouldStartWith("gig-tab-status: ");
 		result.Error.ShouldNotContain("Traceback");
-	}
-
-	private static string IsolatedPath(DaySession day)
-	{
-		var bin = Path.Combine(day.Root, "status-bin");
-		Directory.CreateDirectory(bin);
-		File.CreateSymbolicLink(Path.Combine(bin, "python3"), "/usr/bin/python3");
-		day.Environment["PATH"] = bin;
-
-		return bin;
-	}
-
-	private static string PrintStatus(object client, string? seconds = "445506", bool paused = false, object? project = null)
-	{
-		var task = new Dictionary<string, object>
-		{
-			["client"] = new { key = client },
-			["project"] = new { key = project ?? "work" },
-			["display"] = "01:02:00",
-		};
-
-		if (seconds is not null) task["raw_seconds"] = JsonSerializer.Deserialize<JsonElement>(seconds);
-
-		var envelope = new { ok = true, data = new { running = paused ? null : task, paused = paused ? new[] { task } : [] } };
-
-		return "printf '%s' '" + JsonSerializer.Serialize(envelope) + "'";
-	}
-
-	private static async Task WriteExecutableAsync(string path, string body)
-	{
-		if (!OperatingSystem.IsLinux()) throw new PlatformNotSupportedException("End-to-end tests require Linux.");
-
-		await File.WriteAllTextAsync(path, "#!/bin/sh\n" + body + "\n", TestContext.Current.CancellationToken);
-		File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 	}
 }

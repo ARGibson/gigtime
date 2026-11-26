@@ -1,10 +1,26 @@
 #!/usr/bin/env -S python3 -I
+import http.client
 import json
 import os
-from pathlib import Path
-import shutil
-import subprocess
+import pwd
+import re
+import signal
+import socket
+import stat
 import sys
+import time
+
+
+MAX_BODY_BYTES = 1048576
+MAX_CHUNK_LINE_BYTES = 65536
+MAX_TRAILER_FIELDS = 100
+HTTP_TOKEN = rb"[!#$%&'*+.^_\x60|~0-9A-Za-z-]+"
+QUOTED_STRING = rb'"(?:[\t !#-\[\]-~\x80-\xff]|\\[\t -~\x80-\xff])*"'
+CHUNK_SIZE_LINE = re.compile(
+	rb"([0-9A-Fa-f]+)(?:[ \t]*;[ \t]*" + HTTP_TOKEN
+	+ rb"(?:[ \t]*=[ \t]*(?:" + HTTP_TOKEN + rb"|" + QUOTED_STRING + rb"))?)*\r\n"
+)
+TRAILER_LINE = re.compile(HTTP_TOKEN + rb":[\t -~\x80-\xff]*\r\n")
 
 
 def task_line(task):
@@ -50,34 +66,155 @@ def failure_message(envelope):
 	return ""
 
 
+def socket_path():
+	name = os.environ.get("GIGTIME_INSTANCE") or None
+	if name is not None and re.fullmatch(r"[a-z][a-z0-9-]{0,31}", name) is None:
+		raise ValueError("invalid GIGTIME_INSTANCE")
+	folder = "gigtime" + ("-" + name if name else "")
+	runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+	if not os.path.isabs(runtime):
+		# #33: Path.GetTempPath on Linux uses TMPDIR (even relative), then /tmp.
+		temporary = os.environ.get("TMPDIR") or "/tmp"
+		user = pwd.getpwuid(os.geteuid()).pw_name
+		runtime = os.path.join(temporary, "gigtime-" + user + ("-" + name if name else ""))
+		try:
+			info = os.lstat(runtime)
+		except FileNotFoundError:
+			pass
+		else:
+			if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) != 0o700:
+				raise ValueError("runtime fallback must be a directory owned by the current user with mode 0700")
+	# Match the platform: instance-directory and socket symlinks are followed.
+	return os.path.join(runtime, folder, "gigtimed.sock"), name
+
+
+class UnixStatusConnection(http.client.HTTPConnection):
+	def __init__(self, path, deadline):
+		super().__init__("localhost", timeout=max(0.001, deadline - time.monotonic()))
+		self.path = path
+
+	def connect(self):
+		self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+		self.sock.settimeout(self.timeout)
+		try:
+			self.sock.connect(self.path)
+		except OSError as error:
+			raise OSError(f"Cannot reach gigtimed at {self.path}: {error}") from None
+
+
+def deadline_expired(signum, frame):
+	raise TimeoutError("status deadline exceeded")
+
+
+def read_chunked_body(stream):
+	# #33: http.client accepts corrupt chunk delimiters and EOF in place of the final blank line.
+	body = bytearray()
+	while True:
+		line = stream.readline(MAX_CHUNK_LINE_BYTES + 1)
+		size_line = CHUNK_SIZE_LINE.fullmatch(line) if len(line) <= MAX_CHUNK_LINE_BYTES else None
+		if size_line is None:
+			raise http.client.HTTPException()
+		size = int(size_line[1], 16)
+		if size == 0:
+			break
+		if size > MAX_BODY_BYTES - len(body):
+			raise ValueError("status response exceeds 1 MiB")
+		chunk = stream.read(size)
+		if len(chunk) != size or stream.read(2) != b"\r\n":
+			raise http.client.HTTPException()
+		body.extend(chunk)
+
+	for _ in range(MAX_TRAILER_FIELDS + 1):
+		line = stream.readline(MAX_CHUNK_LINE_BYTES + 1)
+		if line == b"\r\n":
+			return body
+		if len(line) > MAX_CHUNK_LINE_BYTES or TRAILER_LINE.fullmatch(line) is None:
+			raise http.client.HTTPException()
+	raise http.client.HTTPException()
+
+
+def read_body(response):
+	remaining = response.length
+	body = bytearray()
+	while True:
+		part = response.read(min(65536, MAX_BODY_BYTES + 1 - len(body)))
+		if not part:
+			break
+		body.extend(part)
+		if len(body) > MAX_BODY_BYTES:
+			raise ValueError("status response exceeds 1 MiB")
+	if remaining is not None and len(body) != remaining:
+		raise ValueError("incomplete status response")
+	return body
+
+
+def read_status(path, instance):
+	deadline = time.monotonic() + 1.5
+	connection = UnixStatusConnection(path, deadline)
+	response = None
+	previous = signal.signal(signal.SIGALRM, deadline_expired)
+	# #33: an alarm interrupts blocking http.client header/body reads, including drips.
+	signal.setitimer(signal.ITIMER_REAL, max(0.000001, deadline - time.monotonic()))
+	try:
+		connection.request("GET", "/v1/status", headers={"Host": "localhost", "Connection": "close"})
+		response = connection.getresponse()
+		if response.getheader("Content-Encoding", "identity").lower() != "identity":
+			raise ValueError("unsupported status content encoding")
+		lengths = response.headers.get_all("Content-Length", [])
+		transfers = response.headers.get_all("Transfer-Encoding", [])
+		if response.headers.defects or (lengths and (len(lengths) != 1 or re.fullmatch(r"[0-9]+", lengths[0]) is None)):
+			raise ValueError("invalid status response headers")
+		if transfers and (len(transfers) != 1 or transfers[0].lower() != "chunked" or lengths):
+			raise ValueError("unsupported status response framing")
+		body = read_chunked_body(response.fp) if transfers else read_body(response)
+		try:
+			envelope = json.loads(body)
+		except (ValueError, UnicodeError):
+			raise ValueError("invalid status JSON") from None
+		if not isinstance(envelope, dict):
+			raise ValueError("invalid status envelope")
+		if response.status != 200 or envelope.get("ok") is not True:
+			raise ValueError(failure_message(envelope) or "status request was not successful")
+		if envelope.get("command") != "status" or not isinstance(envelope.get("data"), dict):
+			raise ValueError("invalid status envelope")
+		data = envelope["data"]
+		if "instance" not in data or data["instance"] != instance:
+			raise ValueError("status instance does not match GIGTIME_INSTANCE")
+		return envelope
+	finally:
+		# #33: discard pending alarms; nested cleanup also survives delivery at this boundary.
+		try:
+			signal.signal(signal.SIGALRM, signal.SIG_IGN)
+		finally:
+			try:
+				signal.setitimer(signal.ITIMER_REAL, 0)
+			finally:
+				try:
+					if response is not None:
+						response.close()
+				finally:
+					try:
+						connection.close()
+					finally:
+						signal.signal(signal.SIGALRM, previous)
+
+
 def main():
 	try:
-		path = os.pathsep.join(entry for entry in os.get_exec_path() if os.path.isabs(entry))
-		gig = shutil.which("gig", path=path)
-		if gig is None:
-			fallback = Path.home() / ".local/bin/gig"
-			if fallback.is_file() and os.access(fallback, os.X_OK):
-				gig = str(fallback)
-		if gig is None:
-			raise ValueError("gig was not found on PATH or in ~/.local/bin")
-		result = subprocess.run([gig, "status", "--json"], capture_output=True, text=True, timeout=1.5, check=False)
-		try:
-			envelope = json.loads(result.stdout)
-		except (ValueError, RuntimeError):
-			if result.returncode != 0:
-				raise ValueError(result.stderr.strip() or f"gig status exited with code {result.returncode}") from None
-			raise
-		if result.returncode != 0:
-			raise ValueError(failure_message(envelope) or result.stderr.strip() or f"gig status exited with code {result.returncode}")
-		line = format_status(envelope)
+		path, instance = socket_path()
+		line = format_status(read_status(path, instance))
 		if line:
 			print(line)
 		return 0
-	# #33: herdr clears failed entries; a manual invocation still explains the failure.
-	except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.TimeoutExpired) as error:
+	# #33: never echo an HTTP parser exception's potentially untrusted response text.
+	except http.client.HTTPException:
+		message = "invalid HTTP status response"
+	except RecursionError:
+		message = "status JSON is nested too deeply"
+	except (OSError, ValueError, KeyError, TypeError) as error:
 		message = " ".join(str(error).splitlines())
-		print(f"gig-tab-status: {message}", file=sys.stderr)
-		return 1
+	print(f"gig-tab-status: {message}", file=sys.stderr)
+	return 1
 
 
 if __name__ == "__main__":

@@ -477,10 +477,26 @@ Herdr runs the command through a shell, so quote a path containing spaces, for e
 Run `herdr server reload-config` after saving; a running session otherwise keeps
 its old configuration.
 
-The script needs Python 3. It finds `gig` in absolute `PATH` entries, then in `~/.local/bin`, and
-passes through `GIGTIME_INSTANCE`. The entry is also empty if `gig` fails; run the
-script by hand to see the error on stderr. The release archive doesn't include the
-script, so keep the checkout at the configured path.
+The script needs only Python 3 and access to the daemon's Unix socket. It sends a
+bodyless `GET /v1/status` directly to that socket; it does not discover or run `gig`.
+This `/v1` route is a supported integration surface: successful responses use the
+status envelope documented above (`ok: true`, `command: "status"`, and `data` with
+`running`, `paused` and `instance`). Additive response fields are allowed; incompatible
+responses clear the entry rather than triggering another transport or endpoint.
+Failure envelopes carry `error.message`; the script prints it as one stderr line.
+
+`GIGTIME_INSTANCE` selects the instance, with an unset or empty value selecting the
+default. Names must match `^[a-z][a-z0-9-]{0,31}$`. The script uses an absolute
+`XDG_RUNTIME_DIR`, otherwise the platform's private temporary fallback, and checks
+the response's instance. It follows instance-directory and socket symlinks like the
+CLI, while rejecting an unsafe fallback root. Path checks do not authenticate a
+daemon against other code running as the same user.
+
+Each request has a total 1.5-second deadline and a 1 MiB response limit, including
+chunked responses. These are integration resource limits. An unavailable socket,
+slow startup, HTTP failure or unusable response clears the entry; the next refresh
+tries again. Run the script by hand to see its diagnostic on stderr. The release
+archive doesn't include the script, so keep the checkout at the configured path.
 
 ## Verification
 

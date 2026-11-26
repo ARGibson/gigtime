@@ -25,12 +25,27 @@ public sealed class PublishedFixture : IAsyncLifetime
 			["ArtifactsPath"] = Path.Combine(Root, "build"),
 			["UseArtifactsOutput"] = "true",
 			["GIGTIME_INSTANCE"] = "",
+			// #33: let the locked restore exit without leaving MSBuild worker nodes.
+			["MSBUILDDISABLENODEREUSE"] = "1",
+			["HOME"] = Path.Combine(Root, "build-home"),
 			["XDG_DATA_HOME"] = Path.Combine(Root, "build-data"),
 			["XDG_RUNTIME_DIR"] = Path.Combine(Root, "build-runtime"),
 			["XDG_CONFIG_HOME"] = Path.Combine(Root, "build-config"),
 		};
 
 		foreach (var value in environment.Values.Where(Path.IsPathFullyQualified)) Directory.CreateDirectory(value);
+
+		// #33: share only the parent NuGet package cache and its lock directory with the fixture.
+		var packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+		environment["NUGET_PACKAGES"] = string.IsNullOrEmpty(packages)
+			? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages")
+			: packages;
+
+		var scratch = Environment.GetEnvironmentVariable("NUGET_SCRATCH");
+		environment["NUGET_SCRATCH"] = string.IsNullOrEmpty(scratch)
+			? Path.Combine(Path.GetTempPath(), "NuGetScratch" + Environment.UserName)
+			: scratch;
+
 		var restored = await CommandProcess.RunAsync("dotnet", ["restore", "--locked-mode"], repository, environment, TimeSpan.FromMinutes(5));
 		restored.ExitCode.ShouldBe(0, "Locked restore failed:\n" + restored.Output + restored.Error);
 
@@ -40,7 +55,7 @@ public sealed class PublishedFixture : IAsyncLifetime
 
 			string[] arguments =
 			[
-				"publish", "src/" + project, "-c", "Release", "--no-restore",
+				"publish", "src/" + project, "-c", "Release", "--no-restore", "--disable-build-servers",
 				"-p:PublishAot=" + (cli ? "true" : "false"), "-warnaserror", "-p:ILLinkTreatWarningsAsErrors=true",
 				"-p:IlcTreatWarningsAsErrors=true", "-o", cli ? Path.Combine(Root, "cli") : Application,
 				.. cli ? Array.Empty<string>() : ["-r", "linux-x64", "--self-contained", "false"],
