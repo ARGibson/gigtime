@@ -35,9 +35,16 @@ public sealed class PublishedFixture : IAsyncLifetime
 
 		foreach (var value in environment.Values.Where(Path.IsPathFullyQualified)) Directory.CreateDirectory(value);
 
-		// #33: the read-mostly NuGet cache is the one parent path shared with the fixture.
-		environment["NUGET_PACKAGES"] = Environment.GetEnvironmentVariable("NUGET_PACKAGES")
-			?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+		// #33: share only the parent NuGet package cache and its lock directory with the fixture.
+		var packages = Environment.GetEnvironmentVariable("NUGET_PACKAGES");
+		environment["NUGET_PACKAGES"] = string.IsNullOrEmpty(packages)
+			? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages")
+			: packages;
+
+		var scratch = Environment.GetEnvironmentVariable("NUGET_SCRATCH");
+		environment["NUGET_SCRATCH"] = string.IsNullOrEmpty(scratch)
+			? Path.Combine(Path.GetTempPath(), "NuGetScratch" + Environment.UserName)
+			: scratch;
 
 		var restored = await CommandProcess.RunAsync("dotnet", ["restore", "--locked-mode"], repository, environment, TimeSpan.FromMinutes(5));
 		restored.ExitCode.ShouldBe(0, "Locked restore failed:\n" + restored.Output + restored.Error);
